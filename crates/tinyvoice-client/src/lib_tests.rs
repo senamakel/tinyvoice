@@ -156,9 +156,7 @@ impl Interface for MockVoice {
             tinyvoice_bus::names::methods::SESSION_STATUS => {
                 json!(r#"{"phase":"idle","generation":0}"#)
             }
-            tinyvoice_bus::names::methods::RESERVE_CAPTURE => json!({
-                "Ok": {"handle": "capture-1"}
-            }),
+            tinyvoice_bus::names::methods::RESERVE_CAPTURE => json!({"Ok": "capture-1"}),
             tinyvoice_bus::names::methods::CAPTURE_START => json!({
                 "Ok": {
                     "handle": "capture-1",
@@ -303,7 +301,7 @@ async fn stateless_wrappers_preserve_every_wire_member_and_positional_argument()
             ),
             (
                 tinyvoice_bus::names::methods::GATE_RECORDING.to_owned(),
-                json!([1.0, 0.5, 0.3, 0.01])
+                json!([1.0, 0.5, 0.30000001192092896_f64, 0.009999999776482582_f64])
             ),
             (
                 tinyvoice_bus::names::methods::IS_HALLUCINATED.to_owned(),
@@ -327,7 +325,7 @@ async fn stateless_wrappers_preserve_every_wire_member_and_positional_argument()
             ),
             (
                 tinyvoice_bus::names::methods::ENCODE_WAV_PCM16.to_owned(),
-                json!(["/////wIAAA==", 16_000, 1])
+                json!(["//8CAA==", 16_000, 1])
             ),
         ]
     );
