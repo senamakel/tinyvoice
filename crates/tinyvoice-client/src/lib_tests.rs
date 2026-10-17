@@ -527,13 +527,23 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .replies
-        .push((
-            tinyvoice_bus::names::methods::HOTKEY_RESERVE.to_owned(),
-            denied_reply,
-        ));
+        .extend([
+            (
+                tinyvoice_bus::names::methods::HOTKEY_RESERVE.to_owned(),
+                denied_reply.clone(),
+            ),
+            (
+                tinyvoice_bus::names::methods::RESERVE_CAPTURE.to_owned(),
+                denied_reply,
+            ),
+        ]);
     assert_eq!(
         client.reserve_hotkey(request.clone()).await?,
         Err(tinyvoice_bus::HotkeyError::PermissionDenied)
+    );
+    assert_eq!(
+        client.reserve_capture(permission).await?,
+        Err(tinyvoice_bus::capture::CaptureError::PermissionDenied)
     );
 
     let calls = recorded(&state);
@@ -587,6 +597,10 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
             (
                 tinyvoice_bus::names::methods::HOTKEY_RESERVE.to_owned(),
                 json!([{"request":{"key":"space","mode":"push","source":"host"}}])
+            ),
+            (
+                tinyvoice_bus::names::methods::RESERVE_CAPTURE.to_owned(),
+                json!([{"permission":"granted","handle":null}])
             ),
         ]
     );
