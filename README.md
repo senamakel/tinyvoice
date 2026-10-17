@@ -8,6 +8,7 @@ Ships two things from one repository:
 | --- | --- | --- |
 | `tinyvoice` (`crates/`) | `rlib` | A host that links the logic in-process |
 | `tinyvoice-bus` (`crates/`) | `rlib` | A host that only needs TinyBus names and value types |
+| `tinyvoice-client` (`crates/`) | `rlib` | A typed TinyBus client for the loadable TinyVoice module |
 | `tinyvoice-module` (`crates/`) | `cdylib` | A host that loads it over the TinyBus module ABI |
 
 ## What belongs here, and what does not
