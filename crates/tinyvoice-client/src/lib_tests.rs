@@ -251,6 +251,10 @@ fn recorded(state: &State) -> Vec<(String, Value)> {
         .clone()
 }
 
+fn context<T>(label: &str, result: Result<T>) -> std::io::Result<T> {
+    result.map_err(|error| std::io::Error::other(format!("{label}: {:?}", error.kind())))
+}
+
 #[tokio::test]
 async fn stateless_wrappers_preserve_every_wire_member_and_positional_argument()
 -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -339,17 +343,20 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
     let vad_config = tinyvoice_bus::VadConfig::default();
     let vad = VadSession::open(&client, vad_config).await?;
     assert!(!format!("{vad:?}").contains("41"));
-    assert!(vad.push(20, &[0.2, 0.0]).await?.is_empty());
-    assert!(vad.is_speaking().await?);
-    vad.reset().await?;
+    assert!(context("VAD push", vad.push(20, &[0.2, 0.0]).await)?.is_empty());
+    assert!(context("VAD speaking", vad.is_speaking().await)?);
+    context("VAD reset", vad.reset().await)?;
     let vad_id = vad.id;
-    vad.close().await?;
+    context("VAD close", vad.close().await)?;
     drop(vad);
 
     let recorder = RecorderSession::open(&client).await?;
     assert!(!format!("{recorder:?}").contains("73"));
     assert_eq!(
-        recorder.advance(tinyvoice_bus::SessionInput::Run).await?,
+        context(
+            "recorder advance",
+            recorder.advance(tinyvoice_bus::SessionInput::Run).await,
+        )?,
         tinyvoice_bus::SessionAdvance {
             accepted: true,
             phase: tinyvoice_bus::SessionPhase::Idle,
@@ -358,14 +365,14 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
         }
     );
     assert_eq!(
-        recorder.status().await?,
+        context("recorder status", recorder.status().await)?,
         tinyvoice_bus::SessionStatus {
             phase: tinyvoice_bus::SessionPhase::Idle,
             generation: 0,
         }
     );
     let recorder_id = recorder.id;
-    recorder.close().await?;
+    context("recorder close", recorder.close().await)?;
     drop(recorder);
 
     let abandoned_vad = VadSession::open(&client, vad_config).await?;
@@ -522,7 +529,8 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
         .expect("hotkey stop");
     client.shutdown_hotkeys().await?.expect("hotkey shutdown");
 
-    let denied_reply: Value = json!({"Err": "permission_denied"});
+    let denied_hotkey_reply: Value = json!({"Err": "permission_denied"});
+    let denied_capture_reply: Value = json!({"Err": {"code": "permission_denied"}});
     state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -530,11 +538,11 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
         .extend([
             (
                 tinyvoice_bus::names::methods::HOTKEY_RESERVE.to_owned(),
-                denied_reply.clone(),
+                denied_hotkey_reply,
             ),
             (
                 tinyvoice_bus::names::methods::RESERVE_CAPTURE.to_owned(),
-                denied_reply,
+                denied_capture_reply,
             ),
         ]);
     assert_eq!(
