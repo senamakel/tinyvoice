@@ -340,6 +340,7 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
     let (_service, client, state, _) = fixture().await?;
     let vad_config = tinyvoice_bus::VadConfig::default();
     let vad = VadSession::open(&client, vad_config).await?;
+    assert!(!format!("{vad:?}").contains("41"));
     assert!(vad.push(20, &[0.2, 0.0]).await?.is_empty());
     assert!(vad.is_speaking().await?);
     vad.reset().await?;
@@ -348,6 +349,7 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
     drop(vad);
 
     let recorder = RecorderSession::open(&client).await?;
+    assert!(!format!("{recorder:?}").contains("73"));
     assert_eq!(
         recorder.advance(tinyvoice_bus::SessionInput::Run).await?,
         tinyvoice_bus::SessionAdvance {
@@ -629,16 +631,20 @@ async fn unexpected_intents_and_module_errors_remain_closed_and_redacted()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .failure = Some(FailureMode::Unavailable);
     let unavailable = client.route("secret transcript").await.unwrap_err();
-    assert_eq!(unavailable, ModuleCallError::Unavailable);
-    assert_eq!(format!("{unavailable:?}"), "Unavailable");
+    assert_eq!(unavailable.kind(), ModuleCallError::Unavailable);
+    assert!(!format!("{unavailable:?}").contains("module stopped"));
+    assert!(!unavailable.to_string().contains("module stopped"));
 
     state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .failure = Some(FailureMode::Execution);
     let failure = client.route("secret transcript").await.unwrap_err();
-    assert_eq!(failure, ModuleCallError::ModuleFault);
-    assert_eq!(format!("{failure:?}"), "ModuleFault");
+    assert_eq!(failure.kind(), ModuleCallError::ModuleFault);
+    assert_eq!(failure.raw_message(), "sensitive transcript marker");
+    assert!(format!("{failure:?}").contains("<redacted>"));
+    assert!(!format!("{failure:?}").contains("sensitive transcript marker"));
+    assert!(!failure.to_string().contains("sensitive transcript marker"));
     assert!(!failure.to_string().contains("sensitive transcript marker"));
 
     state
@@ -646,8 +652,8 @@ async fn unexpected_intents_and_module_errors_remain_closed_and_redacted()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .failure = Some(FailureMode::Incompatible);
     let incompatible = client.route("secret transcript").await.unwrap_err();
-    assert_eq!(incompatible, ModuleCallError::IncompatibleContract);
-    assert_eq!(format!("{incompatible:?}"), "IncompatibleContract");
+    assert_eq!(incompatible.kind(), ModuleCallError::IncompatibleContract);
+    assert!(!format!("{incompatible:?}").contains("sensitive transcript marker"));
 
     let reports = failures
         .0
