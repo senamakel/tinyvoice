@@ -75,6 +75,7 @@ impl ModuleAccess for FixtureAccess {
 #[derive(Clone, Copy)]
 enum FailureMode {
     Unavailable,
+    Incompatible,
     Execution,
 }
 
@@ -118,7 +119,12 @@ impl Interface for MockVoice {
                 FailureMode::Unavailable => tinybus::Error::ModuleUnavailable {
                     module: MODULE_ID.to_owned(),
                     state: "stopped".to_owned(),
-                    detail: secret.to_owned(),
+                    detail: "module stopped".to_owned(),
+                },
+                FailureMode::Incompatible => tinybus::Error::UnknownMethod {
+                    interface: InterfaceName::new(tinyvoice_bus::BUS_NAME)
+                        .unwrap_or_else(|_| std::process::abort()),
+                    member: MemberName::new(name).unwrap_or_else(|_| std::process::abort()),
                 },
                 FailureMode::Execution => tinybus::Error::failed(secret),
             });
@@ -413,13 +419,13 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
 async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors()
 -> std::result::Result<(), Box<dyn std::error::Error>> {
     let (_service, client, state, _) = fixture().await?;
-    let permission = tinyvoice_bus::MicrophonePermission::Granted;
+    let permission = tinyvoice_bus::capture::MicrophonePermission::Granted;
     let capture = client.reserve_capture(permission).await?.expect("capture reservation");
     let stream = client
         .start_capture(capture.clone(), permission)
         .await?
         .expect("capture stream");
-    let poll = tinyvoice_bus::CapturePollRequest {
+    let poll = tinyvoice_bus::capture::CapturePollRequest {
         handle: stream.handle.clone(),
         max_chunks: 2,
     };
@@ -548,13 +554,25 @@ async fn unexpected_intents_and_module_errors_remain_closed_and_redacted()
     assert_eq!(format!("{failure:?}"), "ModuleFault");
     assert!(!failure.to_string().contains("sensitive transcript marker"));
 
+    state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .failure = Some(FailureMode::Incompatible);
+    let incompatible = client.route("secret transcript").await.unwrap_err();
+    assert_eq!(incompatible, ModuleCallError::IncompatibleContract);
+    assert_eq!(format!("{incompatible:?}"), "IncompatibleContract");
+
     let reports = failures
         .0
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    assert_eq!(reports.len(), 2);
+    assert_eq!(reports.len(), 3);
     assert_eq!(reports[0], (MODULE_ID.to_owned(), "module_unavailable".to_owned()));
     assert_eq!(reports[1], (MODULE_ID.to_owned(), "module_fault".to_owned()));
+    assert_eq!(
+        reports[2],
+        (MODULE_ID.to_owned(), "incompatible_contract".to_owned())
+    );
     assert!(!format!("{reports:?}").contains("sensitive transcript marker"));
     Ok(())
 }
