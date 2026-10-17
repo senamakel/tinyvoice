@@ -917,18 +917,8 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 2.0.21",
- "tinybus-macros",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "tinybus-macros"
-version = "0.2.2"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]

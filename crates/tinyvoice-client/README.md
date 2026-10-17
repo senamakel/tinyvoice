@@ -17,6 +17,12 @@ the corresponding module method; dropping a Rust handle does not imply remote
 cleanup. OpenHuman keeps host policy such as volume clamping and conversion
 from persisted server configuration into `VadConfig` in its own adapter.
 
+The client keeps the configured `ModuleClient` deadline and reporting sink.
+It does not add a second timeout. `VoiceCallError::kind()` exposes the closed
+failure category; its `Debug` and `Display` omit remote prose. The explicit
+`raw_message()` and `raw_wire_name()` accessors return untrusted remote values
+and require a caller-owned redaction policy before display or logging.
+
 The recording-broker tests use only TinyBus's in-memory transport. They record
 actual service invocations and verify the wire arguments and returned types;
 they do not load a published artifact, access a microphone, or contact a
