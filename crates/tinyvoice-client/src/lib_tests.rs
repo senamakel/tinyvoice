@@ -304,7 +304,7 @@ async fn stateless_wrappers_preserve_every_wire_member_and_positional_argument()
             ),
             (
                 tinyvoice_bus::names::methods::GATE_RECORDING.to_owned(),
-                json!([1.0, 0.5, 0.30000001192092896_f64, 0.009999999776482582_f64])
+                json!([1.0_f32, 0.5_f32, 0.3_f32, 0.01_f32])
             ),
             (
                 tinyvoice_bus::names::methods::IS_HALLUCINATED.to_owned(),
@@ -391,7 +391,7 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
             ),
             (
                 tinyvoice_bus::names::methods::VAD_PUSH.to_owned(),
-                json!([vad_id, 20, [0.2, 0.0]])
+                json!([vad_id, 20, [0.2_f32, 0.0_f32]])
             ),
             (
                 tinyvoice_bus::names::methods::VAD_IS_SPEAKING.to_owned(),
