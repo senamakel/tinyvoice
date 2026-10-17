@@ -379,7 +379,7 @@ impl TinyVoiceClient {
             .await
     }
 
-    /// Stop capture and wait for native resource cleanup.
+    /// Request that the module stop the capture lease.
     ///
     /// # Errors
     ///
@@ -390,7 +390,7 @@ impl TinyVoiceClient {
             .await
     }
 
-    /// Shut down every module-owned capture lease.
+    /// Request shutdown of every module-owned capture lease.
     ///
     /// # Errors
     ///

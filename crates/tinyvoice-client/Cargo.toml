@@ -8,16 +8,22 @@ description = "Typed TinyBus host client for the TinyVoice module."
 repository = "https://github.com/tinyhumansai/tinyvoice"
 
 [dependencies]
+# The contract carries audio samples as base64 text.
 base64 = "0.22"
-serde = { version = "1", features = ["derive"] }
+# TinyBus serializes contract values and deserializes their replies.
+serde = "1"
+# The module's transforms and stateful replies are inner JSON strings.
 serde_json = "1"
+# Shared TinyVoice member names, request types, and typed replies.
 tinyvoice-bus = { version = "0.1.4", path = "../tinyvoice-bus" }
+# One host-configured module client owns calls, deadlines, and reporting.
 tinybus = { version = ">=0.2.2, <0.3", path = "../../vendor/tinybus/crates/tinybus", default-features = false }
 
 [dev-dependencies]
+# Implements the async in-memory service used by the broker tests.
 async-trait = "0.1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
-tinybus = { version = ">=0.2.2, <0.3", path = "../../vendor/tinybus/crates/tinybus", default-features = false }
+# Provides the async test executor and `#[tokio::test]` macro.
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true
