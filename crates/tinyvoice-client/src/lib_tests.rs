@@ -1,5 +1,8 @@
 //! Product-facing wire tests over a real in-memory `TinyBus` broker.
 
+// These behavior tests intentionally use assertion helpers that panic on failure.
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -139,7 +142,8 @@ impl Interface for MockVoice {
                 json!(r#"{"disposition":"command","command":"open slack"}"#)
             }
             tinyvoice_bus::names::methods::GATE_RECORDING => json!("\"pass\""),
-            tinyvoice_bus::names::methods::IS_HALLUCINATED => json!(true),
+            tinyvoice_bus::names::methods::IS_HALLUCINATED
+            | tinyvoice_bus::names::methods::VAD_IS_SPEAKING => json!(true),
             tinyvoice_bus::names::methods::PREPARE_CAPTURE
             | tinyvoice_bus::names::methods::ENCODE_WAV
             | tinyvoice_bus::names::methods::ENCODE_WAV_PCM16 => json!("AQ=="),
@@ -147,7 +151,6 @@ impl Interface for MockVoice {
             tinyvoice_bus::names::methods::FRAME_ENERGIES => json!([0.25]),
             tinyvoice_bus::names::methods::VAD_OPEN => json!(41),
             tinyvoice_bus::names::methods::VAD_PUSH => json!("[]"),
-            tinyvoice_bus::names::methods::VAD_IS_SPEAKING => json!(true),
             tinyvoice_bus::names::methods::SESSION_OPEN => json!(73),
             tinyvoice_bus::names::methods::SESSION_ADVANCE => {
                 json!(
@@ -167,15 +170,13 @@ impl Interface for MockVoice {
             tinyvoice_bus::names::methods::CAPTURE_POLL => {
                 json!({"Ok": {"chunks": [], "closed": false}})
             }
-            tinyvoice_bus::names::methods::VAD_RESET
-            | tinyvoice_bus::names::methods::VAD_CLOSE
-            | tinyvoice_bus::names::methods::SESSION_CLOSE => Value::Null,
             tinyvoice_bus::names::methods::CAPTURE_STOP
             | tinyvoice_bus::names::methods::CAPTURE_SHUTDOWN => json!({"Ok": null}),
             tinyvoice_bus::names::methods::HOTKEY_RESERVE => json!({"Ok": "hotkey-1"}),
             tinyvoice_bus::names::methods::HOTKEY_START
             | tinyvoice_bus::names::methods::HOTKEY_STOP
-            | tinyvoice_bus::names::methods::HOTKEY_SHUTDOWN => json!({
+            | tinyvoice_bus::names::methods::HOTKEY_SHUTDOWN
+            | tinyvoice_bus::names::methods::HOTKEY_FEED => json!({
                 "Ok": {
                     "state": "running",
                     "generation": 1,
@@ -190,14 +191,6 @@ impl Interface for MockVoice {
                     "events": [],
                     "reset": false,
                     "active": false
-                }
-            }),
-            tinyvoice_bus::names::methods::HOTKEY_FEED => json!({
-                "Ok": {
-                    "state": "running",
-                    "generation": 1,
-                    "active": false,
-                    "continuity_lost": false
                 }
             }),
             _ => Value::Null,
@@ -338,6 +331,7 @@ async fn stateless_wrappers_preserve_every_wire_member_and_positional_argument()
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly()
 -> std::result::Result<(), Box<dyn std::error::Error>> {
     let (_service, client, state, _) = fixture().await?;
@@ -455,6 +449,7 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors()
 -> std::result::Result<(), Box<dyn std::error::Error>> {
     let (_service, client, state, _) = fixture().await?;
