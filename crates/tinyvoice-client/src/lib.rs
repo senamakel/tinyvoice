@@ -11,10 +11,6 @@ use serde::{Serialize, de::DeserializeOwned};
 use tinybus::module::{ModuleCallError, ModuleCallFailure, ModuleClient};
 
 pub use tinyvoice_bus as contract;
-pub use tinyvoice_bus::{
-    GateVerdict, IndexedVadEvent, RecordingGates, SessionAction, SessionAdvance, SessionInput,
-    SessionPhase, SessionStatus, UtteranceDisposition, VadConfig, VadEvent, VoiceIntent,
-};
 pub use tinyvoice_bus::capture::{
     CaptureBatch, CaptureError, CaptureFormat, CaptureHandle, CapturePollRequest, CaptureResult,
     CaptureStream, MicrophonePermission, RawChunk, RecordingFinishRequest, RecordingStartRequest,
@@ -25,6 +21,10 @@ pub use tinyvoice_bus::hotkey::{
     HotkeyReserveRequest, HotkeySource, HotkeyStartRequest, HotkeyState, SequencedHostFact,
 };
 pub use tinyvoice_bus::transcript::Mode as HallucinationMode;
+pub use tinyvoice_bus::{
+    GateVerdict, IndexedVadEvent, RecordingGates, SessionAction, SessionAdvance, SessionInput,
+    SessionPhase, SessionStatus, UtteranceDisposition, VadConfig, VadEvent, VoiceIntent,
+};
 
 /// Registry id of the loadable module these calls use.
 pub const MODULE_ID: &str = "tinyvoice";
@@ -294,7 +294,10 @@ impl TinyVoiceClient {
         channels: u16,
     ) -> Result<Vec<u8>> {
         use base64::Engine as _;
-        let bytes: Vec<u8> = samples.iter().flat_map(|sample| sample.to_le_bytes()).collect();
+        let bytes: Vec<u8> = samples
+            .iter()
+            .flat_map(|sample| sample.to_le_bytes())
+            .collect();
         let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
         let wav: String = self
             .call(
@@ -382,10 +385,7 @@ impl TinyVoiceClient {
     ///
     /// Returns a sanitized TinyBus failure; a capture refusal remains the
     /// typed inner [`CaptureError`].
-    pub async fn stop_capture(
-        &self,
-        handle: CaptureHandle,
-    ) -> Result<CaptureResult<()>> {
+    pub async fn stop_capture(&self, handle: CaptureHandle) -> Result<CaptureResult<()>> {
         self.call(tinyvoice_bus::names::methods::CAPTURE_STOP, (handle,))
             .await
     }
@@ -508,16 +508,17 @@ impl TinyVoiceClient {
         R: DeserializeOwned,
     {
         let response: String = self.call(method, args).await?;
-        serde_json::from_str(&response).map_err(|error| {
-            self.malformed_reply(format!("could not decode {field}: {error}"))
-        })
+        serde_json::from_str(&response)
+            .map_err(|error| self.malformed_reply(format!("could not decode {field}: {error}")))
     }
 
     fn decode_audio(&self, encoded: &str) -> Result<Vec<u8>> {
         use base64::Engine as _;
         base64::engine::general_purpose::STANDARD
             .decode(encoded)
-            .map_err(|error| self.malformed_reply(format!("module returned invalid audio: {error}")))
+            .map_err(|error| {
+                self.malformed_reply(format!("module returned invalid audio: {error}"))
+            })
     }
 
     fn decode_samples(&self, encoded: &str) -> Result<Vec<f32>> {
@@ -647,7 +648,9 @@ impl RecorderSession {
     ///
     /// Returns a sanitized TinyBus failure.
     pub async fn open(client: &TinyVoiceClient) -> Result<Self> {
-        let id = client.call(tinyvoice_bus::names::methods::SESSION_OPEN, ()).await?;
+        let id = client
+            .call(tinyvoice_bus::names::methods::SESSION_OPEN, ())
+            .await?;
         Ok(Self {
             client: client.clone(),
             id,

@@ -150,7 +150,9 @@ impl Interface for MockVoice {
             tinyvoice_bus::names::methods::VAD_IS_SPEAKING => json!(true),
             tinyvoice_bus::names::methods::SESSION_OPEN => json!(73),
             tinyvoice_bus::names::methods::SESSION_ADVANCE => {
-                json!(r#"{"accepted":true,"phase":"idle","generation":0,"action":{"action":"none"}}"#)
+                json!(
+                    r#"{"accepted":true,"phase":"idle","generation":0,"action":{"action":"none"}}"#
+                )
             }
             tinyvoice_bus::names::methods::SESSION_STATUS => {
                 json!(r#"{"phase":"idle","generation":0}"#)
@@ -481,10 +483,7 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
         .stop_capture(stream.handle.clone())
         .await?
         .expect("capture stop");
-    client
-        .shutdown_capture()
-        .await?
-        .expect("capture shutdown");
+    client.shutdown_capture().await?.expect("capture shutdown");
 
     let request = tinyvoice_bus::HotkeyRequest {
         key: "space".to_owned(),
