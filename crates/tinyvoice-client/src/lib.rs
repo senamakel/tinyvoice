@@ -1,9 +1,9 @@
-//! Typed host calls to the TinyVoice TinyBus module.
+//! Typed host calls to the `TinyVoice` `TinyBus` module.
 //!
 //! The client owns the method names, positional payloads, and conversions at
 //! the module boundary. Hosts provide one configured
 //! [`ModuleClient`](tinybus::module::ModuleClient); loading, deadlines, and
-//! terminal reporting remain TinyBus responsibilities.
+//! terminal reporting remain `TinyBus` responsibilities.
 
 use std::fmt;
 
@@ -29,13 +29,13 @@ pub use tinyvoice_bus::{
 /// Registry id of the loadable module these calls use.
 pub const MODULE_ID: &str = "tinyvoice";
 
-/// Result of a typed TinyVoice operation.
+/// Result of a typed `TinyVoice` operation.
 pub type Result<T> = std::result::Result<T, VoiceCallError>;
 
-/// A terminal TinyBus failure with its untrusted remote prose kept private by
+/// A terminal `TinyBus` failure with its untrusted remote prose kept private by
 /// default.
 ///
-/// `Debug`, `Display`, and TinyBus terminal reports contain only the closed
+/// `Debug`, `Display`, and `TinyBus` terminal reports contain only the closed
 /// error classification. A caller that has an explicit user-facing policy may
 /// retrieve remote prose through [`raw_message`](Self::raw_message); it must
 /// not log that value or forward it to telemetry without redaction.
@@ -107,7 +107,7 @@ impl fmt::Display for VoiceCallError {
 
 impl std::error::Error for VoiceCallError {}
 
-/// Typed TinyVoice calls over one host-configured TinyBus module client.
+/// Typed `TinyVoice` calls over one host-configured `TinyBus` module client.
 #[derive(Clone)]
 pub struct TinyVoiceClient {
     module: ModuleClient,
@@ -123,7 +123,7 @@ impl fmt::Debug for TinyVoiceClient {
 }
 
 impl TinyVoiceClient {
-    /// Wrap the host's configured TinyBus client.
+    /// Wrap the host's configured `TinyBus` client.
     ///
     /// This stores the given client and does not open a connection or create a
     /// second resolver. Calls use its module access, reporting sink, fixture,
@@ -140,7 +140,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns the sanitized TinyBus failure category. Its raw remote details
+    /// Returns the sanitized `TinyBus` failure category. Its raw remote details
     /// are available only through the explicit getters on [`VoiceCallError`].
     pub async fn route(&self, transcript: &str) -> Result<VoiceIntent> {
         self.call_json(
@@ -155,7 +155,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure or a sanitized malformed-reply
+    /// Returns a sanitized `TinyBus` failure or a sanitized malformed-reply
     /// error.
     pub async fn sequence_utterance(
         &self,
@@ -174,7 +174,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure or a sanitized malformed-reply
+    /// Returns a sanitized `TinyBus` failure or a sanitized malformed-reply
     /// error.
     pub async fn gate_recording(
         &self,
@@ -199,7 +199,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure.
+    /// Returns a sanitized `TinyBus` failure.
     pub async fn is_hallucinated(&self, text: &str, mode: HallucinationMode) -> Result<bool> {
         self.call(
             tinyvoice_bus::names::methods::IS_HALLUCINATED,
@@ -212,7 +212,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure or malformed audio-reply error.
+    /// Returns a sanitized `TinyBus` failure or malformed audio-reply error.
     pub async fn prepare_capture(
         &self,
         samples: &[f32],
@@ -238,7 +238,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure or malformed audio-reply error.
+    /// Returns a sanitized `TinyBus` failure or malformed audio-reply error.
     pub async fn encode_wav(&self, samples: &[f32], sample_rate: u32) -> Result<Vec<u8>> {
         let wav: String = self
             .call(
@@ -253,7 +253,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure or malformed sample-reply error.
+    /// Returns a sanitized `TinyBus` failure or malformed sample-reply error.
     pub async fn prepare_frames(
         &self,
         samples: &[f32],
@@ -273,7 +273,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure.
+    /// Returns a sanitized `TinyBus` failure.
     pub async fn frame_energies(&self, samples: &[f32], frame_len: u32) -> Result<Vec<f32>> {
         self.call(
             tinyvoice_bus::names::methods::FRAME_ENERGIES,
@@ -286,7 +286,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure or malformed audio-reply error.
+    /// Returns a sanitized `TinyBus` failure or malformed audio-reply error.
     pub async fn encode_wav_pcm16(
         &self,
         samples: &[i16],
@@ -312,7 +312,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure.
+    /// Returns a sanitized `TinyBus` failure.
     pub async fn open_vad(&self, config: VadConfig) -> Result<VadSession> {
         let config = encode_json(&config, "VAD config")?;
         let id = self
@@ -328,7 +328,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure; a capture refusal remains the
+    /// Returns a sanitized `TinyBus` failure; a capture refusal remains the
     /// typed inner [`CaptureError`].
     pub async fn reserve_capture(
         &self,
@@ -348,7 +348,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure; a capture refusal remains the
+    /// Returns a sanitized `TinyBus` failure; a capture refusal remains the
     /// typed inner [`CaptureError`].
     pub async fn start_capture(
         &self,
@@ -369,7 +369,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure; a capture refusal remains the
+    /// Returns a sanitized `TinyBus` failure; a capture refusal remains the
     /// typed inner [`CaptureError`].
     pub async fn poll_capture(
         &self,
@@ -383,7 +383,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure; a capture refusal remains the
+    /// Returns a sanitized `TinyBus` failure; a capture refusal remains the
     /// typed inner [`CaptureError`].
     pub async fn stop_capture(&self, handle: CaptureHandle) -> Result<CaptureResult<()>> {
         self.call(tinyvoice_bus::names::methods::CAPTURE_STOP, (handle,))
@@ -394,7 +394,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure; a capture refusal remains the
+    /// Returns a sanitized `TinyBus` failure; a capture refusal remains the
     /// typed inner [`CaptureError`].
     pub async fn shutdown_capture(&self) -> Result<CaptureResult<()>> {
         self.call(tinyvoice_bus::names::methods::CAPTURE_SHUTDOWN, ())
@@ -405,7 +405,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure; a listener refusal remains the
+    /// Returns a sanitized `TinyBus` failure; a listener refusal remains the
     /// typed inner [`HotkeyError`].
     pub async fn reserve_hotkey(
         &self,
@@ -422,7 +422,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure; a listener refusal remains the
+    /// Returns a sanitized `TinyBus` failure; a listener refusal remains the
     /// typed inner [`HotkeyError`].
     pub async fn start_hotkey(
         &self,
@@ -439,7 +439,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure; a listener refusal remains the
+    /// Returns a sanitized `TinyBus` failure; a listener refusal remains the
     /// typed inner [`HotkeyError`].
     pub async fn read_hotkey(
         &self,
@@ -453,7 +453,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure; a listener refusal remains the
+    /// Returns a sanitized `TinyBus` failure; a listener refusal remains the
     /// typed inner [`HotkeyError`].
     pub async fn feed_hotkey(
         &self,
@@ -467,7 +467,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure; a listener refusal remains the
+    /// Returns a sanitized `TinyBus` failure; a listener refusal remains the
     /// typed inner [`HotkeyError`].
     pub async fn stop_hotkey(
         &self,
@@ -484,7 +484,7 @@ impl TinyVoiceClient {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure; a listener refusal remains the
+    /// Returns a sanitized `TinyBus` failure; a listener refusal remains the
     /// typed inner [`HotkeyError`].
     pub async fn shutdown_hotkeys(&self) -> Result<std::result::Result<HotkeyReply, HotkeyError>> {
         self.call(tinyvoice_bus::names::methods::HOTKEY_SHUTDOWN, ())
@@ -567,7 +567,7 @@ impl VadSession {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure.
+    /// Returns a sanitized `TinyBus` failure.
     pub async fn open(client: &TinyVoiceClient, config: VadConfig) -> Result<Self> {
         client.open_vad(config).await
     }
@@ -576,7 +576,7 @@ impl VadSession {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure or malformed-reply error.
+    /// Returns a sanitized `TinyBus` failure or malformed-reply error.
     pub async fn push(&self, frame_ms: u32, energies: &[f32]) -> Result<Vec<IndexedVadEvent>> {
         self.client
             .call_json(
@@ -591,7 +591,7 @@ impl VadSession {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure.
+    /// Returns a sanitized `TinyBus` failure.
     pub async fn is_speaking(&self) -> Result<bool> {
         self.client
             .call(tinyvoice_bus::names::methods::VAD_IS_SPEAKING, (self.id,))
@@ -602,7 +602,7 @@ impl VadSession {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure.
+    /// Returns a sanitized `TinyBus` failure.
     pub async fn reset(&self) -> Result<()> {
         self.client
             .call(tinyvoice_bus::names::methods::VAD_RESET, (self.id,))
@@ -613,7 +613,7 @@ impl VadSession {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure.
+    /// Returns a sanitized `TinyBus` failure.
     pub async fn close(&self) -> Result<()> {
         self.client
             .call(tinyvoice_bus::names::methods::VAD_CLOSE, (self.id,))
@@ -646,7 +646,7 @@ impl RecorderSession {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure.
+    /// Returns a sanitized `TinyBus` failure.
     pub async fn open(client: &TinyVoiceClient) -> Result<Self> {
         let id = client
             .call(tinyvoice_bus::names::methods::SESSION_OPEN, ())
@@ -661,7 +661,7 @@ impl RecorderSession {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure or malformed-reply error.
+    /// Returns a sanitized `TinyBus` failure or malformed-reply error.
     pub async fn advance(&self, input: SessionInput) -> Result<SessionAdvance> {
         let encoded = encode_json(&input, "recording session input")?;
         self.client
@@ -677,7 +677,7 @@ impl RecorderSession {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure or malformed-reply error.
+    /// Returns a sanitized `TinyBus` failure or malformed-reply error.
     pub async fn status(&self) -> Result<SessionStatus> {
         self.client
             .call_json(
@@ -692,7 +692,7 @@ impl RecorderSession {
     ///
     /// # Errors
     ///
-    /// Returns a sanitized TinyBus failure.
+    /// Returns a sanitized `TinyBus` failure.
     pub async fn close(&self) -> Result<()> {
         self.client
             .call(tinyvoice_bus::names::methods::SESSION_CLOSE, (self.id,))

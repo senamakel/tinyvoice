@@ -1,4 +1,4 @@
-//! Product-facing wire tests over a real in-memory TinyBus broker.
+//! Product-facing wire tests over a real in-memory `TinyBus` broker.
 
 use std::sync::{Arc, Mutex};
 
