@@ -660,11 +660,32 @@ async fn unexpected_intents_and_module_errors_remain_closed_and_redacted()
     assert_eq!(incompatible.kind(), ModuleCallError::IncompatibleContract);
     assert!(!format!("{incompatible:?}").contains("sensitive transcript marker"));
 
+    {
+        let mut state = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.failure = None;
+        let route_reply = state
+            .replies
+            .iter_mut()
+            .find(|(member, _)| member == tinyvoice_bus::names::methods::ROUTE)
+            .expect("route override");
+        route_reply.1 = json!(r#"{"payload":"sensitive transcript marker"}"#);
+    }
+    let malformed = client.route("secret transcript").await.unwrap_err();
+    assert_eq!(malformed.kind(), ModuleCallError::ModuleFault);
+    assert!(!format!("{malformed:?}").contains("sensitive transcript marker"));
+    assert!(
+        !malformed
+            .to_string()
+            .contains("sensitive transcript marker")
+    );
+
     let reports = failures
         .0
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    assert_eq!(reports.len(), 3);
+    assert_eq!(reports.len(), 4);
     assert_eq!(
         reports[0],
         (MODULE_ID.to_owned(), "module_unavailable".to_owned())
@@ -677,6 +698,34 @@ async fn unexpected_intents_and_module_errors_remain_closed_and_redacted()
         reports[2],
         (MODULE_ID.to_owned(), "incompatible_contract".to_owned())
     );
+    assert_eq!(
+        reports[3],
+        (MODULE_ID.to_owned(), "module_fault".to_owned())
+    );
     assert!(!format!("{reports:?}").contains("sensitive transcript marker"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn proxy_startup_failures_keep_the_transport_classification()
+-> std::result::Result<(), Box<dyn std::error::Error>> {
+    let failures = Arc::new(RecordingFailures::default());
+    let module = ModuleClient::new(FixtureAccess {
+        reporter: FailureReporter::new(failures.clone()),
+    });
+    let client = TinyVoiceClient::new(module);
+    let error = client.route("private transcript").await.unwrap_err();
+
+    assert_eq!(error.kind(), ModuleCallError::TransportFailed);
+    assert!(!format!("{error:?}").contains("private transcript"));
+    assert!(!error.to_string().contains("private transcript"));
+    assert_eq!(
+        failures
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_slice(),
+        [(MODULE_ID.to_owned(), "transport_failed".to_owned())]
+    );
     Ok(())
 }
