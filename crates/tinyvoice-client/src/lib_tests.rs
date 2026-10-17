@@ -364,7 +364,7 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
             generation: 0,
         }
     );
-    let recorder_id = recorder.id();
+    let recorder_id = recorder.id;
     recorder.close().await?;
     drop(recorder);
 
