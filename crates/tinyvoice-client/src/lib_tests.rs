@@ -155,18 +155,18 @@ impl Interface for MockVoice {
             }),
             tinyvoice_bus::names::methods::CAPTURE_START => json!({
                 "Ok": {
-                    "handle": {"handle": "capture-1"},
+                    "handle": "capture-1",
                     "format": {"source_rate": 48_000, "channels": 1}
                 }
             }),
             tinyvoice_bus::names::methods::CAPTURE_POLL => {
                 json!({"Ok": {"chunks": [], "closed": false}})
             }
-            tinyvoice_bus::names::methods::CAPTURE_STOP
-            | tinyvoice_bus::names::methods::CAPTURE_SHUTDOWN
-            | tinyvoice_bus::names::methods::VAD_RESET
+            tinyvoice_bus::names::methods::VAD_RESET
             | tinyvoice_bus::names::methods::VAD_CLOSE
-            | tinyvoice_bus::names::methods::SESSION_CLOSE => json!({"Ok": null}),
+            | tinyvoice_bus::names::methods::SESSION_CLOSE => Value::Null,
+            tinyvoice_bus::names::methods::CAPTURE_STOP
+            | tinyvoice_bus::names::methods::CAPTURE_SHUTDOWN => json!({"Ok": null}),
             tinyvoice_bus::names::methods::HOTKEY_RESERVE => json!({"Ok": "hotkey-1"}),
             tinyvoice_bus::names::methods::HOTKEY_START
             | tinyvoice_bus::names::methods::HOTKEY_STOP
@@ -323,7 +323,7 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
     assert!(vad.push(20, &[0.2, 0.0]).await?.is_empty());
     assert!(vad.is_speaking().await?);
     vad.reset().await?;
-    let vad_id = vad.id();
+    let vad_id = vad.id;
     vad.close().await?;
     drop(vad);
 
@@ -476,11 +476,11 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
             ),
             (
                 tinyvoice_bus::names::methods::CAPTURE_START.to_owned(),
-                json!([{"permission":"granted","handle":{"handle":"capture-1"}}])
+                json!([{"permission":"granted","handle":"capture-1"}])
             ),
             (
                 tinyvoice_bus::names::methods::CAPTURE_POLL.to_owned(),
-                json!([{"handle":{"handle":"capture-1"},"max_chunks":2}])
+                json!([{"handle":"capture-1","max_chunks":2}])
             ),
             (
                 tinyvoice_bus::names::methods::CAPTURE_STOP.to_owned(),
