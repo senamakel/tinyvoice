@@ -151,7 +151,7 @@ impl Interface for MockVoice {
             tinyvoice_bus::names::methods::VAD_IS_SPEAKING => json!(true),
             tinyvoice_bus::names::methods::SESSION_OPEN => json!(73),
             tinyvoice_bus::names::methods::SESSION_ADVANCE => {
-                json!(r#"{"accepted":true,"phase":"idle","generation":0,"action":"none"}"#)
+                json!(r#"{"accepted":true,"phase":"idle","generation":0,"action":{"action":"none"}}"#)
             }
             tinyvoice_bus::names::methods::SESSION_STATUS => {
                 json!(r#"{"phase":"idle","generation":0}"#)
@@ -572,7 +572,7 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
             ),
             (
                 tinyvoice_bus::names::methods::CAPTURE_STOP.to_owned(),
-                json!([{"handle":"capture-1"}])
+                json!(["capture-1"])
             ),
             (
                 tinyvoice_bus::names::methods::CAPTURE_SHUTDOWN.to_owned(),
