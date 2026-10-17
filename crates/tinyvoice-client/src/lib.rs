@@ -2,7 +2,7 @@
 //!
 //! The client owns the method names, positional payloads, and conversions at
 //! the module boundary. Hosts provide one configured
-//! [`ModuleClient`](tinybus::module::ModuleClient); loading, deadlines, and
+//! [`ModuleClient`]; loading, deadlines, and
 //! terminal reporting remain `TinyBus` responsibilities.
 
 use std::fmt;
