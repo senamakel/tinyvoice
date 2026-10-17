@@ -22,6 +22,6 @@ actual service invocations and verify the wire arguments and returned types;
 they do not load a published artifact, access a microphone, or contact a
 backend.
 
-The manifest's TinyBus version range is a draft against the published 0.2.1
-client API. Pin the final constraint to the TinyBus 0.3.x runtime when the
-runtime SDK and vendored gitlink are aligned.
+The manifest's TinyBus version range targets the published 0.2.2 client API.
+Pin the final constraint to the TinyBus 0.3.x runtime when the runtime SDK and
+vendored gitlink are aligned.
