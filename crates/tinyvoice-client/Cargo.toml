@@ -8,6 +8,7 @@ description = "Typed TinyBus host client for the TinyVoice module."
 repository = "https://github.com/tinyhumansai/tinyvoice"
 
 [dependencies]
+base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 tinyvoice-bus = { version = "0.1.4", path = "../tinyvoice-bus" }
 tinybus = { version = ">=0.2.2, <0.3", path = "../../vendor/tinybus/crates/tinybus", default-features = false }
