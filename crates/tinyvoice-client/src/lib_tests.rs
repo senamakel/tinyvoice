@@ -150,9 +150,9 @@ impl Interface for MockVoice {
             tinyvoice_bus::names::methods::VAD_PUSH => json!("[]"),
             tinyvoice_bus::names::methods::VAD_IS_SPEAKING => json!(true),
             tinyvoice_bus::names::methods::SESSION_OPEN => json!(73),
-            tinyvoice_bus::names::methods::SESSION_ADVANCE => json!(
-                r#"{"accepted":true,"phase":"idle","generation":0,"action":"none"}"#
-            ),
+            tinyvoice_bus::names::methods::SESSION_ADVANCE => {
+                json!(r#"{"accepted":true,"phase":"idle","generation":0,"action":"none"}"#)
+            }
             tinyvoice_bus::names::methods::SESSION_STATUS => {
                 json!(r#"{"phase":"idle","generation":0}"#)
             }
@@ -207,7 +207,8 @@ impl Interface for MockVoice {
     }
 }
 
-async fn fixture() -> tinybus::Result<(Connection, TinyVoiceClient, State, Arc<RecordingFailures>)> {
+async fn fixture() -> tinybus::Result<(Connection, TinyVoiceClient, State, Arc<RecordingFailures>)>
+{
     let bus = MemoryBus::new();
     Broker::new().spawn(bus.clone());
     let service = Connection::connect(bus.connect().await?).await?;
@@ -237,7 +238,10 @@ async fn fixture() -> tinybus::Result<(Connection, TinyVoiceClient, State, Arc<R
 
 fn encoded(samples: &[f32]) -> String {
     use base64::Engine as _;
-    let bytes: Vec<u8> = samples.iter().flat_map(|sample| sample.to_le_bytes()).collect();
+    let bytes: Vec<u8> = samples
+        .iter()
+        .flat_map(|sample| sample.to_le_bytes())
+        .collect();
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
@@ -259,9 +263,14 @@ async fn stateless_wrappers_preserve_every_wire_member_and_positional_argument()
         silence_threshold: 0.01,
     };
 
-    assert_eq!(client.route("pause").await?, tinyvoice_bus::VoiceIntent::Pause);
     assert_eq!(
-        client.sequence_utterance("hey tiny open slack", "Hey Tiny").await?,
+        client.route("pause").await?,
+        tinyvoice_bus::VoiceIntent::Pause
+    );
+    assert_eq!(
+        client
+            .sequence_utterance("hey tiny open slack", "Hey Tiny")
+            .await?,
         tinyvoice_bus::UtteranceDisposition::Command {
             command: "open slack".to_owned()
         }
@@ -270,9 +279,11 @@ async fn stateless_wrappers_preserve_every_wire_member_and_positional_argument()
         client.gate_recording(1.0, 0.5, gates).await?,
         tinyvoice_bus::GateVerdict::Pass
     );
-    assert!(client
-        .is_hallucinated("okay", tinyvoice_bus::Mode::Dictation)
-        .await?);
+    assert!(
+        client
+            .is_hallucinated("okay", tinyvoice_bus::Mode::Dictation)
+            .await?
+    );
     assert_eq!(client.prepare_capture(&samples, 32_000, 2, 0.0).await?, [1]);
     assert_eq!(client.encode_wav(&samples, 16_000).await?, [1]);
     assert_eq!(client.prepare_frames(&samples, 32_000, 2).await?, [0.0]);
@@ -282,7 +293,10 @@ async fn stateless_wrappers_preserve_every_wire_member_and_positional_argument()
     assert_eq!(
         recorded(&state),
         [
-            (tinyvoice_bus::names::methods::ROUTE.to_owned(), json!(["pause"])),
+            (
+                tinyvoice_bus::names::methods::ROUTE.to_owned(),
+                json!(["pause"])
+            ),
             (
                 tinyvoice_bus::names::methods::SEQUENCE_UTTERANCE.to_owned(),
                 json!(["hey tiny open slack", "Hey Tiny"])
@@ -335,9 +349,7 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
 
     let recorder = RecorderSession::open(&client).await?;
     assert_eq!(
-        recorder
-            .advance(tinyvoice_bus::SessionInput::Run)
-            .await?,
+        recorder.advance(tinyvoice_bus::SessionInput::Run).await?,
         tinyvoice_bus::SessionAdvance {
             accepted: true,
             phase: tinyvoice_bus::SessionPhase::Idle,
@@ -367,7 +379,9 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
         [
             (
                 tinyvoice_bus::names::methods::VAD_OPEN.to_owned(),
-                json!([r#"{"onset_threshold":0.01,"hangover_ms":800,"min_speech_ms":300,"max_utterance_ms":30000}"#])
+                json!([
+                    r#"{"onset_threshold":0.01,"hangover_ms":800,"min_speech_ms":300,"max_utterance_ms":30000}"#
+                ])
             ),
             (
                 tinyvoice_bus::names::methods::VAD_PUSH.to_owned(),
@@ -377,9 +391,18 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
                 tinyvoice_bus::names::methods::VAD_IS_SPEAKING.to_owned(),
                 json!([vad_id])
             ),
-            (tinyvoice_bus::names::methods::VAD_RESET.to_owned(), json!([vad_id])),
-            (tinyvoice_bus::names::methods::VAD_CLOSE.to_owned(), json!([vad_id])),
-            (tinyvoice_bus::names::methods::SESSION_OPEN.to_owned(), json!([])),
+            (
+                tinyvoice_bus::names::methods::VAD_RESET.to_owned(),
+                json!([vad_id])
+            ),
+            (
+                tinyvoice_bus::names::methods::VAD_CLOSE.to_owned(),
+                json!([vad_id])
+            ),
+            (
+                tinyvoice_bus::names::methods::SESSION_OPEN.to_owned(),
+                json!([])
+            ),
             (
                 tinyvoice_bus::names::methods::SESSION_ADVANCE.to_owned(),
                 json!([recorder_id, r#"{"input":"run"}"#])
@@ -392,8 +415,16 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
                 tinyvoice_bus::names::methods::SESSION_CLOSE.to_owned(),
                 json!([recorder_id])
             ),
-            (tinyvoice_bus::names::methods::VAD_OPEN.to_owned(), json!([r#"{"onset_threshold":0.01,"hangover_ms":800,"min_speech_ms":300,"max_utterance_ms":30000}"#])),
-            (tinyvoice_bus::names::methods::SESSION_OPEN.to_owned(), json!([])),
+            (
+                tinyvoice_bus::names::methods::VAD_OPEN.to_owned(),
+                json!([
+                    r#"{"onset_threshold":0.01,"hangover_ms":800,"min_speech_ms":300,"max_utterance_ms":30000}"#
+                ])
+            ),
+            (
+                tinyvoice_bus::names::methods::SESSION_OPEN.to_owned(),
+                json!([])
+            ),
         ]
     );
     assert_eq!(
@@ -420,7 +451,10 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
 -> std::result::Result<(), Box<dyn std::error::Error>> {
     let (_service, client, state, _) = fixture().await?;
     let permission = tinyvoice_bus::capture::MicrophonePermission::Granted;
-    let capture = client.reserve_capture(permission).await?.expect("capture reservation");
+    let capture = client
+        .reserve_capture(permission)
+        .await?
+        .expect("capture reservation");
     let stream = client
         .start_capture(capture.clone(), permission)
         .await?
@@ -429,7 +463,14 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
         handle: stream.handle.clone(),
         max_chunks: 2,
     };
-    assert!(client.poll_capture(poll.clone()).await?.expect("poll").chunks.is_empty());
+    assert!(
+        client
+            .poll_capture(poll.clone())
+            .await?
+            .expect("poll")
+            .chunks
+            .is_empty()
+    );
     client.stop_capture(stream.handle.clone()).await?;
     client.shutdown_capture().await?;
 
@@ -442,12 +483,22 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
         .reserve_hotkey(request.clone())
         .await?
         .expect("hotkey reservation");
-    let started = client.start_hotkey(handle.clone()).await?.expect("hotkey start");
+    let started = client
+        .start_hotkey(handle.clone())
+        .await?
+        .expect("hotkey start");
     let read = tinyvoice_bus::HotkeyReadRequest {
         handle: handle.clone(),
         acknowledged_batch: None,
     };
-    assert!(client.read_hotkey(read.clone()).await?.expect("hotkey read").events.is_empty());
+    assert!(
+        client
+            .read_hotkey(read.clone())
+            .await?
+            .expect("hotkey read")
+            .events
+            .is_empty()
+    );
     let feed = tinyvoice_bus::HotkeyFeedRequest {
         handle: handle.clone(),
         generation: started.generation.expect("started generation"),
@@ -457,8 +508,18 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
         }],
         overflow: false,
     };
-    assert_eq!(client.feed_hotkey(feed.clone()).await?.expect("host feed").state, started.state);
-    client.stop_hotkey(handle.clone()).await?.expect("hotkey stop");
+    assert_eq!(
+        client
+            .feed_hotkey(feed.clone())
+            .await?
+            .expect("host feed")
+            .state,
+        started.state
+    );
+    client
+        .stop_hotkey(handle.clone())
+        .await?
+        .expect("hotkey stop");
     client.shutdown_hotkeys().await?.expect("hotkey shutdown");
 
     let denied_reply: Value = json!({"Err": "permission_denied"});
@@ -466,7 +527,10 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .replies
-        .push((tinyvoice_bus::names::methods::HOTKEY_RESERVE.to_owned(), denied_reply));
+        .push((
+            tinyvoice_bus::names::methods::HOTKEY_RESERVE.to_owned(),
+            denied_reply,
+        ));
     assert_eq!(
         client.reserve_hotkey(request.clone()).await?,
         Err(tinyvoice_bus::HotkeyError::PermissionDenied)
@@ -492,7 +556,10 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
                 tinyvoice_bus::names::methods::CAPTURE_STOP.to_owned(),
                 json!([{"handle":"capture-1"}])
             ),
-            (tinyvoice_bus::names::methods::CAPTURE_SHUTDOWN.to_owned(), json!([])),
+            (
+                tinyvoice_bus::names::methods::CAPTURE_SHUTDOWN.to_owned(),
+                json!([])
+            ),
             (
                 tinyvoice_bus::names::methods::HOTKEY_RESERVE.to_owned(),
                 json!([{"request":{"key":"space","mode":"push","source":"host"}}])
@@ -513,7 +580,10 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
                 tinyvoice_bus::names::methods::HOTKEY_STOP.to_owned(),
                 json!([{"handle":"hotkey-1"}])
             ),
-            (tinyvoice_bus::names::methods::HOTKEY_SHUTDOWN.to_owned(), json!([])),
+            (
+                tinyvoice_bus::names::methods::HOTKEY_SHUTDOWN.to_owned(),
+                json!([])
+            ),
             (
                 tinyvoice_bus::names::methods::HOTKEY_RESERVE.to_owned(),
                 json!([{"request":{"key":"space","mode":"push","source":"host"}}])
@@ -535,7 +605,10 @@ async fn unexpected_intents_and_module_errors_remain_closed_and_redacted()
             tinyvoice_bus::names::methods::ROUTE.to_owned(),
             json!(r#"{"intent":"newer_unrecognized_intent"}"#),
         ));
-    assert_eq!(client.route("unrecognized command").await?, tinyvoice_bus::VoiceIntent::Unknown);
+    assert_eq!(
+        client.route("unrecognized command").await?,
+        tinyvoice_bus::VoiceIntent::Unknown
+    );
 
     state
         .lock()
@@ -567,8 +640,14 @@ async fn unexpected_intents_and_module_errors_remain_closed_and_redacted()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     assert_eq!(reports.len(), 3);
-    assert_eq!(reports[0], (MODULE_ID.to_owned(), "module_unavailable".to_owned()));
-    assert_eq!(reports[1], (MODULE_ID.to_owned(), "module_fault".to_owned()));
+    assert_eq!(
+        reports[0],
+        (MODULE_ID.to_owned(), "module_unavailable".to_owned())
+    );
+    assert_eq!(
+        reports[1],
+        (MODULE_ID.to_owned(), "module_fault".to_owned())
+    );
     assert_eq!(
         reports[2],
         (MODULE_ID.to_owned(), "incompatible_contract".to_owned())
