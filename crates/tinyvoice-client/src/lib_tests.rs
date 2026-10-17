@@ -16,7 +16,6 @@ use tinybus::{Connection, InterfaceName, MemberName, ObjectPath, Proxy};
 use super::*;
 
 const MODULE_ID: &str = "tinyvoice";
-type Calls = Arc<Mutex<Vec<(String, Value)>>>;
 
 static RELEASE: ReleaseRecord = ReleaseRecord {
     id: MODULE_ID,
@@ -478,8 +477,14 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
             .chunks
             .is_empty()
     );
-    client.stop_capture(stream.handle.clone()).await?;
-    client.shutdown_capture().await?;
+    client
+        .stop_capture(stream.handle.clone())
+        .await?
+        .expect("capture stop");
+    client
+        .shutdown_capture()
+        .await?
+        .expect("capture shutdown");
 
     let request = tinyvoice_bus::HotkeyRequest {
         key: "space".to_owned(),
