@@ -855,7 +855,7 @@ async fn owned_capture_stream_stays_with_its_creator_across_alias_handover() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn timed_out_owned_capture_start_can_publish_after_its_caller_loses_the_handle() {
+async fn timed_out_capture_start_does_not_leave_an_unowned_stream() {
     let gate = Arc::new(CaptureStartGate::default());
     let fixture =
         handoff_fixture_with_capture_start_gate(Some(gate.clone()), Some(Duration::from_secs(1)))
@@ -872,10 +872,13 @@ async fn timed_out_owned_capture_start_can_publish_after_its_caller_loses_the_ha
 
     // The reservation call has completed and CAPTURE_START has reached the
     // remote service, which is deliberately held before native publication.
-    gate.entered.notified().await;
-    tokio::time::advance(Duration::from_secs(1)).await;
-    let timed_out = result_rx
+    tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
         .await
+        .expect("CAPTURE_START reaches the delayed service");
+    tokio::time::advance(Duration::from_secs(1)).await;
+    let timed_out = tokio::time::timeout(Duration::from_secs(5), result_rx)
+        .await
+        .expect("the caller receives its deadline result")
         .expect("the client task reports its deadline result");
     assert!(
         timed_out.is_err(),
@@ -884,9 +887,10 @@ async fn timed_out_owned_capture_start_can_publish_after_its_caller_loses_the_ha
 
     // A timeout only stops the caller's wait. The in-flight service operation
     // can still publish the stream after the caller lost the private handle.
-    let completed = gate.completed.notified();
     gate.release.notify_one();
-    completed.await;
+    tokio::time::timeout(Duration::from_secs(5), gate.completed.notified())
+        .await
+        .expect("the delayed service finishes publishing the stream");
     let late_poll = fixture
         .client
         .poll_capture(CapturePollRequest {
@@ -894,22 +898,17 @@ async fn timed_out_owned_capture_start_can_publish_after_its_caller_loses_the_ha
             max_chunks: 1,
         })
         .await;
+    let late_stream_is_live = matches!(late_poll, Ok(Ok(_)));
     let cleanup = fixture
         .client
         .stop_capture(CaptureHandle(CAPTURE_ID.to_owned()))
         .await;
 
-    assert_eq!(
-        late_poll,
-        Ok(Ok(CaptureBatch {
-            chunks: vec![RawChunk {
-                samples: vec![0.25]
-            }],
-            closed: false,
-        })),
-        "the service published a live stream after start_capture_owned returned an error"
+    assert!(cleanup.is_ok(), "the fixture cleans up any late stream");
+    assert!(
+        !late_stream_is_live,
+        "a timed-out owned start must not leave an unowned live stream"
     );
-    assert_eq!(cleanup, Ok(Ok(())), "the fixture cleans up the late stream");
     assert_eq!(
         methods(&fixture.state_a),
         [
@@ -923,7 +922,7 @@ async fn timed_out_owned_capture_start_can_publish_after_its_caller_loses_the_ha
 }
 
 #[tokio::test]
-async fn canceled_owned_capture_start_can_publish_after_its_caller_loses_the_handle() {
+async fn canceled_capture_start_does_not_leave_an_unowned_stream() {
     let gate = Arc::new(CaptureStartGate::default());
     let fixture = handoff_fixture_with_capture_start_gate(Some(gate.clone()), None)
         .await
@@ -935,18 +934,20 @@ async fn canceled_owned_capture_start_can_publish_after_its_caller_loses_the_han
             .await
     });
 
-    gate.entered.notified().await;
+    tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
+        .await
+        .expect("CAPTURE_START reaches the delayed service");
     start_task.abort();
-    assert!(
-        start_task
-            .await
-            .expect_err("the caller task is canceled")
-            .is_cancelled()
-    );
+    let aborted = tokio::time::timeout(Duration::from_secs(5), start_task)
+        .await
+        .expect("the caller task observes cancellation")
+        .expect_err("the caller task is canceled")
+        .is_cancelled();
 
-    let completed = gate.completed.notified();
     gate.release.notify_one();
-    completed.await;
+    tokio::time::timeout(Duration::from_secs(5), gate.completed.notified())
+        .await
+        .expect("the delayed service finishes publishing the stream");
     let late_poll = fixture
         .client
         .poll_capture(CapturePollRequest {
@@ -954,21 +955,17 @@ async fn canceled_owned_capture_start_can_publish_after_its_caller_loses_the_han
             max_chunks: 1,
         })
         .await;
+    let late_stream_is_live = matches!(late_poll, Ok(Ok(_)));
     let cleanup = fixture
         .client
         .stop_capture(CaptureHandle(CAPTURE_ID.to_owned()))
         .await;
-    assert_eq!(
-        late_poll,
-        Ok(Ok(CaptureBatch {
-            chunks: vec![RawChunk {
-                samples: vec![0.25]
-            }],
-            closed: false,
-        })),
-        "canceling the call dropped its handle but did not stop remote startup"
+    assert!(aborted, "the caller's start future was canceled");
+    assert!(cleanup.is_ok(), "the fixture cleans up any late stream");
+    assert!(
+        !late_stream_is_live,
+        "a canceled owned start must not leave an unowned live stream"
     );
-    assert_eq!(cleanup, Ok(Ok(())), "the fixture cleans up the late stream");
 }
 
 #[tokio::test]
