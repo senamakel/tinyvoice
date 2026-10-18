@@ -3,8 +3,8 @@ resolver = "3"
 # Every package lives under `crates/`. The loadable module is a nested
 # workspace because the vendored TinyBus manifests inherit their own workspace
 # metadata; build it through its own manifest.
-members = ["crates/tinyvoice", "crates/tinyvoice-bus"]
-default-members = ["crates/tinyvoice", "crates/tinyvoice-bus"]
+members = ["crates/tinyvoice", "crates/tinyvoice-bus", "crates/tinyvoice-client"]
+default-members = ["crates/tinyvoice", "crates/tinyvoice-bus", "crates/tinyvoice-client"]
 exclude = ["crates/tinyvoice-module", "vendor", "worktrees"]
 
 # Lints apply to the whole crate and to every target. CI runs clippy with

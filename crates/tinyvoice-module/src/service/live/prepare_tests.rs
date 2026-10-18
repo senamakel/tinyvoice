@@ -45,7 +45,7 @@ async fn native_configuration_preserves_all_explicit_host_fields() -> anyhow::Re
     assert_eq!(prepared.config.provider_options, json!({"host": true}));
     assert_eq!(
         prepared.options.tool_timeout,
-        std::time::Duration::from_millis(1000)
+        std::time::Duration::from_secs(1)
     );
     assert!(!prepared.options.include_deferred_tools);
     Ok(())
