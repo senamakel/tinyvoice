@@ -30,7 +30,7 @@ static RELEASE: ReleaseRecord = ReleaseRecord {
     id: MODULE_ID,
     bus_name: tinyvoice_bus::BUS_NAME,
     object_path: tinyvoice_bus::OBJECT_PATH,
-    version: "0.3.2",
+    version: "0.3.3",
     release_url: "https://example.invalid/tinyvoice",
     assets: &[],
 };
