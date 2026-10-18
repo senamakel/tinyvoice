@@ -359,10 +359,10 @@ impl OwnershipVoice {
                     *canceled = true;
                 }
                 true
-            } else if matches!(&state.capture, CaptureFixtureState::Live) {
-                state.capture = CaptureFixtureState::Empty;
-                false
-            } else if matches!(&state.capture, CaptureFixtureState::Reserved) {
+            } else if matches!(
+                &state.capture,
+                CaptureFixtureState::Live | CaptureFixtureState::Reserved
+            ) {
                 state.capture = CaptureFixtureState::Empty;
                 false
             } else {
