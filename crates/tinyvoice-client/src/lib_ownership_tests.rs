@@ -95,7 +95,9 @@ enum CaptureFixtureState {
     #[default]
     Empty,
     Reserved,
-    Starting { canceled: bool },
+    Starting {
+        canceled: bool,
+    },
     Live,
 }
 
@@ -104,7 +106,9 @@ enum HotkeyFixtureState {
     #[default]
     Empty,
     Reserved,
-    Running { active: bool },
+    Running {
+        active: bool,
+    },
 }
 
 type SharedPeerState = Arc<Mutex<PeerState>>;
@@ -225,7 +229,9 @@ impl Interface for OwnershipVoice {
                     CaptureFixtureState::Starting { canceled: false }
                 ) && !matches!(&state.capture, CaptureFixtureState::Reserved)
                 {
-                    return Err(tinybus::Error::failed("capture startup lost its reservation"));
+                    return Err(tinybus::Error::failed(
+                        "capture startup lost its reservation",
+                    ));
                 }
                 state.capture = CaptureFixtureState::Live;
                 gate.completed.notify_one();
@@ -340,8 +346,7 @@ impl Interface for OwnershipVoice {
                     .get("handle")
                     .and_then(Value::as_str)
                     .ok_or_else(|| tinybus::Error::failed("missing capture reservation"))?;
-                if !matches!(&state.capture, CaptureFixtureState::Reserved)
-                    || handle != CAPTURE_ID
+                if !matches!(&state.capture, CaptureFixtureState::Reserved) || handle != CAPTURE_ID
                 {
                     return Err(tinybus::Error::failed("unknown capture reservation"));
                 }
@@ -407,10 +412,7 @@ impl Interface for OwnershipVoice {
                 } else {
                     "released"
                 };
-                let active = matches!(
-                    &state.hotkey,
-                    HotkeyFixtureState::Running { active: true }
-                );
+                let active = matches!(&state.hotkey, HotkeyFixtureState::Running { active: true });
                 json!({
                     "Ok": {
                         "generation": 1,
