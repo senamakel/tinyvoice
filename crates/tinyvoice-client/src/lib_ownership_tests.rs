@@ -128,7 +128,7 @@ struct OwnershipVoice {
 }
 
 impl OwnershipVoice {
-    fn call_vad(&self, method: &str, args: Value) -> tinybus::Result<Value> {
+    fn call_vad(&self, method: &str, args: &Value) -> tinybus::Result<Value> {
         let values = args
             .as_array()
             .ok_or_else(|| tinybus::Error::failed("expected positional method arguments"))?;
@@ -177,7 +177,7 @@ impl OwnershipVoice {
         }
     }
 
-    fn call_recorder(&self, method: &str, args: Value) -> tinybus::Result<Value> {
+    fn call_recorder(&self, method: &str, args: &Value) -> tinybus::Result<Value> {
         let values = args
             .as_array()
             .ok_or_else(|| tinybus::Error::failed("expected positional method arguments"))?;
@@ -236,7 +236,7 @@ impl OwnershipVoice {
         }
     }
 
-    fn call_capture_request(&self, method: &str, args: Value) -> tinybus::Result<Value> {
+    fn call_capture_request(&self, method: &str, args: &Value) -> tinybus::Result<Value> {
         let values = args
             .as_array()
             .ok_or_else(|| tinybus::Error::failed("expected positional method arguments"))?;
@@ -366,16 +366,14 @@ impl OwnershipVoice {
                 return Ok(json!({"Err": {"code": "unknown_handle"}}));
             }
         };
-        if pending {
-            if let Some(gate) = gate {
-                gate.stop_entered.notify_one();
-                gate.completed.notified().await;
-            }
+        if pending && let Some(gate) = gate {
+            gate.stop_entered.notify_one();
+            gate.completed.notified().await;
         }
         Ok(json!({"Ok": null}))
     }
 
-    fn call_hotkey(&self, method: &str, args: Value) -> tinybus::Result<Value> {
+    fn call_hotkey(&self, method: &str, args: &Value) -> tinybus::Result<Value> {
         let values = args
             .as_array()
             .ok_or_else(|| tinybus::Error::failed("expected positional method arguments"))?;
@@ -460,14 +458,14 @@ impl Interface for OwnershipVoice {
             | tinyvoice_bus::names::methods::VAD_PUSH
             | tinyvoice_bus::names::methods::VAD_IS_SPEAKING
             | tinyvoice_bus::names::methods::VAD_RESET
-            | tinyvoice_bus::names::methods::VAD_CLOSE => self.call_vad(method, args),
+            | tinyvoice_bus::names::methods::VAD_CLOSE => self.call_vad(method, &args),
             tinyvoice_bus::names::methods::SESSION_OPEN
             | tinyvoice_bus::names::methods::SESSION_ADVANCE
             | tinyvoice_bus::names::methods::SESSION_STATUS
-            | tinyvoice_bus::names::methods::SESSION_CLOSE => self.call_recorder(method, args),
+            | tinyvoice_bus::names::methods::SESSION_CLOSE => self.call_recorder(method, &args),
             tinyvoice_bus::names::methods::RESERVE_CAPTURE
             | tinyvoice_bus::names::methods::CAPTURE_POLL => {
-                self.call_capture_request(method, args)
+                self.call_capture_request(method, &args)
             }
             tinyvoice_bus::names::methods::CAPTURE_START => self.call_capture_start(args).await,
             tinyvoice_bus::names::methods::CAPTURE_STOP => self.call_capture_stop(args).await,
@@ -475,7 +473,7 @@ impl Interface for OwnershipVoice {
             | tinyvoice_bus::names::methods::HOTKEY_START
             | tinyvoice_bus::names::methods::HOTKEY_FEED
             | tinyvoice_bus::names::methods::HOTKEY_READ
-            | tinyvoice_bus::names::methods::HOTKEY_STOP => self.call_hotkey(method, args),
+            | tinyvoice_bus::names::methods::HOTKEY_STOP => self.call_hotkey(method, &args),
             _ => Err(tinybus::Error::failed(
                 "unexpected ownership fixture method",
             )),
