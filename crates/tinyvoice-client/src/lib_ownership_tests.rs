@@ -125,22 +125,32 @@ impl Interface for OwnershipVoice {
 
     async fn call(&self, member: &MemberName, args: Value) -> tinybus::Result<Value> {
         let method = member.as_str();
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
-        state.calls.push((method.to_owned(), args.clone()));
-        let values = args
-            .as_array()
-            .ok_or_else(|| tinybus::Error::failed("expected positional method arguments"))?;
-
         if method == tinyvoice_bus::names::methods::CAPTURE_START {
-            if let Some(gate) = &self.capture_start_gate {
-                state.capture_pending = true;
-                drop(state);
+            if let Some(gate) = self.capture_start_gate.clone() {
+                let request = args
+                    .as_array()
+                    .and_then(|values| values.first())
+                    .and_then(Value::as_object)
+                    .ok_or_else(|| tinybus::Error::failed("missing capture start request"))?;
+                let handle = request
+                    .get("handle")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| tinybus::Error::failed("missing capture reservation"))?
+                    .to_owned();
+                {
+                    let mut state = self
+                        .state
+                        .lock()
+                        .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
+                    state.calls.push((method.to_owned(), args));
+                    if !state.capture_reserved || handle != CAPTURE_ID {
+                        return Err(tinybus::Error::failed("unknown capture reservation"));
+                    }
+                    state.capture_pending = true;
+                }
                 gate.entered.notify_one();
                 gate.release.notified().await;
-                state = self
+                let mut state = self
                     .state
                     .lock()
                     .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
@@ -151,8 +161,26 @@ impl Interface for OwnershipVoice {
                     gate.completed.notify_one();
                     return Ok(json!({"Err": {"code": "cancelled"}}));
                 }
+                state.capture_pending = false;
+                state.capture_reserved = false;
+                state.capture_open = true;
+                gate.completed.notify_one();
+                return Ok(json!({
+                    "Ok": {
+                        "handle": CAPTURE_ID,
+                        "format": {"source_rate": 48_000, "channels": 1}
+                    }
+                }));
             }
         }
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
+        state.calls.push((method.to_owned(), args.clone()));
+        let values = args
+            .as_array()
+            .ok_or_else(|| tinybus::Error::failed("expected positional method arguments"))?;
 
         let result = match method {
             tinyvoice_bus::names::methods::ROUTE => match self.peer {
@@ -254,9 +282,6 @@ impl Interface for OwnershipVoice {
                 state.capture_pending = false;
                 state.capture_reserved = false;
                 state.capture_open = true;
-                if let Some(gate) = &self.capture_start_gate {
-                    gate.completed.notify_one();
-                }
                 json!({
                     "Ok": {
                         "handle": CAPTURE_ID,
