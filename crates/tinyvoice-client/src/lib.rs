@@ -729,3 +729,7 @@ fn hallucination_mode_wire(mode: HallucinationMode) -> &'static str {
 #[cfg(test)]
 #[path = "lib_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "lib_ownership_tests.rs"]
+mod ownership_tests;
