@@ -27,7 +27,7 @@ class SdkVersionTests(unittest.TestCase):
             capture_output=True,
             text=True,
         ).stdout
-        indexed_commit = re.search(r"^160000 [0-9a-f]+\s+([0-9a-f]{40})\t", indexed, re.M)
+        indexed_commit = re.search(r"^160000 ([0-9a-f]{40}) 0\t", indexed, re.M)
         if indexed_commit and indexed_commit[1] == TINYBUS_033:
             return
 
