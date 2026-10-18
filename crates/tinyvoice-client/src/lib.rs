@@ -494,7 +494,7 @@ impl TinyVoiceClient {
         request: HotkeyRequest,
     ) -> Result<std::result::Result<OwnedHotkeySession, HotkeyError>> {
         let client = self.bind().await?;
-        let handle = client
+        let handle: std::result::Result<HotkeyHandle, HotkeyError> = client
             .call(
                 tinyvoice_bus::names::methods::HOTKEY_RESERVE,
                 (HotkeyReserveRequest { request },),

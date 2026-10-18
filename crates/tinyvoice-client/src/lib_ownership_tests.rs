@@ -796,38 +796,34 @@ async fn owned_capture_stream_stays_with_its_creator_across_alias_handover() {
         .expect("B capture start succeeds");
     assert_eq!(a.handle, b.handle, "capture handles collide across peers");
     let b_batch = b.poll(1).await;
-    assert_eq!(
-        b_batch,
-        Ok(Ok(CaptureBatch {
-            chunks: vec![RawChunk {
-                samples: vec![0.75]
-            }],
-            closed: false,
-        })),
+    assert!(
+        matches!(
+            b_batch,
+            Ok(Ok(CaptureBatch { chunks, closed: false }))
+                if chunks == vec![RawChunk { samples: vec![0.75] }]
+        ),
         "B's stream returns a usable B-specific capture canary"
     );
 
     let a_batch = a.poll(1).await;
     let a_close = a.close().await;
     let b_still_open = b.poll(1).await;
-    assert_eq!(
-        (a_batch, a_close, b_still_open),
-        (
-            Ok(Ok(CaptureBatch {
-                chunks: vec![RawChunk {
-                    samples: vec![0.25]
-                }],
-                closed: false,
-            })),
-            Ok(Ok(())),
-            Ok(Ok(CaptureBatch {
-                chunks: vec![RawChunk {
-                    samples: vec![0.75]
-                }],
-                closed: false,
-            })),
+    assert!(
+        matches!(
+            a_batch,
+            Ok(Ok(CaptureBatch { chunks, closed: false }))
+                if chunks == vec![RawChunk { samples: vec![0.25] }]
         ),
-        "A polling/close stay on A, and closing A leaves B live"
+        "A's poll reaches its own stream"
+    );
+    assert_eq!(a_close, Ok(Ok(())), "A's stream closes on A");
+    assert!(
+        matches!(
+            b_still_open,
+            Ok(Ok(CaptureBatch { chunks, closed: false }))
+                if chunks == vec![RawChunk { samples: vec![0.75] }]
+        ),
+        "closing A leaves B's stream live"
     );
     assert_eq!(
         methods(&fixture.state_a),
