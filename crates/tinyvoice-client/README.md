@@ -48,6 +48,9 @@ actual service invocations and verify wire arguments, returned types, peer
 handover, and owner-close behavior; they do not load a published artifact,
 access a microphone, or contact a backend.
 
-The client and module manifests target the published TinyBus 0.3.3 line. Its
-vendored gitlink resolves to the signed `v0.3.3` source commit; the workspace
-and module lockfiles are refreshed by the integration build owner.
+The client and module manifests use TinyBus's canonical Git source, pinned to
+the signed `v0.3.3` source commit with a `>=0.3.3, <0.4.0` compatibility range.
+The standalone workspace and excluded module workspace patch that source to
+their shared vendored gitlink. Linked hosts can patch the same Git source to
+their one SDK checkout, so the typed client and module use identical Rust SDK
+types.
