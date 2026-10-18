@@ -379,20 +379,21 @@ impl TinyVoiceClient {
         .await
     }
 
-    /// Reserve and start a continuous stream on one pinned module peer.
+    /// Reserve a continuous capture on one pinned module peer.
     ///
-    /// The returned stream keeps the peer selected for this creation call for
-    /// all polls and explicit cleanup. Host microphone permission remains an
-    /// input supplied by the caller.
+    /// The returned owner is available before fallible native startup begins.
+    /// Retain it while calling [`OwnedCaptureReservation::start`], so a timeout
+    /// or canceled start can still be stopped through the same pinned peer.
+    /// Host microphone permission remains an input supplied by the caller.
     ///
     /// # Errors
     ///
     /// Returns a sanitized `TinyBus` failure; a capture refusal remains the
     /// typed inner [`CaptureError`].
-    pub async fn start_capture_owned(
+    pub async fn reserve_capture_owned(
         &self,
         permission: MicrophonePermission,
-    ) -> Result<CaptureResult<OwnedCaptureStream>> {
+    ) -> Result<CaptureResult<OwnedCaptureReservation>> {
         let client = self.bind().await?;
         let reservation = client
             .call(
@@ -407,23 +408,11 @@ impl TinyVoiceClient {
             Ok(handle) => handle,
             Err(error) => return Ok(Err(error)),
         };
-        let stream: CaptureResult<CaptureStream> = client
-            .call(
-                tinyvoice_bus::names::methods::CAPTURE_START,
-                (RecordingStartRequest {
-                    permission,
-                    handle: Some(handle),
-                },),
-            )
-            .await?;
-        match stream {
-            Ok(stream) => Ok(Ok(OwnedCaptureStream {
-                client,
-                handle: stream.handle,
-                format: stream.format,
-            })),
-            Err(error) => Ok(Err(error)),
-        }
+        Ok(Ok(OwnedCaptureReservation {
+            client,
+            handle,
+            permission,
+        }))
     }
 
     /// Read a bounded batch from a continuous capture lease.
@@ -704,6 +693,80 @@ impl VadSession {
     pub async fn close(&self) -> Result<()> {
         self.client
             .call(tinyvoice_bus::names::methods::VAD_CLOSE, (self.id,))
+            .await
+    }
+}
+
+/// A reserved capture bound to the module peer that created it.
+///
+/// Keep this owner while [`start`](Self::start) is pending or may still finish
+/// after the caller's request deadline. Call [`close`](Self::close) explicitly
+/// to cancel pending startup or stop a published stream. Dropping the value
+/// performs no remote cleanup.
+#[derive(Clone)]
+pub struct OwnedCaptureReservation {
+    client: TinyVoiceClient,
+    handle: CaptureHandle,
+    permission: MicrophonePermission,
+}
+
+impl fmt::Debug for OwnedCaptureReservation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OwnedCaptureReservation")
+            .field("handle", &"<redacted>")
+            .field("permission", &self.permission)
+            .finish_non_exhaustive()
+    }
+}
+
+impl OwnedCaptureReservation {
+    /// Start the reserved stream on its pinned module peer.
+    ///
+    /// Retain this reservation while awaiting the result. If the call times out
+    /// or is canceled, [`close`](Self::close) still addresses the creating
+    /// peer's known handle.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized `TinyBus` failure; a capture refusal remains the
+    /// typed inner [`CaptureError`].
+    pub async fn start(&self) -> Result<CaptureResult<OwnedCaptureStream>> {
+        let stream: CaptureResult<CaptureStream> = self
+            .client
+            .call(
+                tinyvoice_bus::names::methods::CAPTURE_START,
+                (RecordingStartRequest {
+                    permission: self.permission,
+                    handle: Some(self.handle.clone()),
+                },),
+            )
+            .await?;
+        match stream {
+            Ok(stream) => Ok(Ok(OwnedCaptureStream {
+                client: self.client.clone(),
+                handle: stream.handle,
+                format: stream.format,
+            })),
+            Err(error) => Ok(Err(error)),
+        }
+    }
+
+    /// Cancel pending startup or stop a published stream on its pinned peer.
+    ///
+    /// If startup has not begun, the module may report [`CaptureError::UnknownHandle`];
+    /// reservations expire in the module according to its existing contract.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized `TinyBus` failure; a capture refusal remains the
+    /// typed inner [`CaptureError`].
+    pub async fn close(&self) -> Result<CaptureResult<()>> {
+        self.client
+            .call(
+                tinyvoice_bus::names::methods::CAPTURE_STOP,
+                (self.handle.clone(),),
+            )
             .await
     }
 }
