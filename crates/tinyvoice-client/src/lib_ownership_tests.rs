@@ -1,4 +1,4 @@
-//! Alias-handover regression tests for owned TinyVoice session projections.
+//! Alias-handover regression tests for owned `TinyVoice` session projections.
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
@@ -321,7 +321,9 @@ impl OwnershipVoice {
                 &state.capture,
                 CaptureFixtureState::Starting { canceled: false }
             ) {
-                return Err(tinybus::Error::failed("capture startup lost its reservation"));
+                return Err(tinybus::Error::failed(
+                    "capture startup lost its reservation",
+                ));
             }
             state.capture = CaptureFixtureState::Live;
             gate.completed.notify_one();
@@ -345,10 +347,9 @@ impl OwnershipVoice {
                 .state
                 .lock()
                 .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
-            state.calls.push((
-                tinyvoice_bus::names::methods::CAPTURE_STOP.to_owned(),
-                args,
-            ));
+            state
+                .calls
+                .push((tinyvoice_bus::names::methods::CAPTURE_STOP.to_owned(), args));
             if handle != Some(CAPTURE_ID) {
                 return Ok(json!({"Err": {"code": "unknown_handle"}}));
             }
@@ -401,7 +402,11 @@ impl OwnershipVoice {
                 ensure_hotkey_open(&state, values.first().and_then(Value::as_object))?;
                 let active = self.peer == Peer::B
                     && matches!(&state.hotkey, HotkeyFixtureState::Running { active: true });
-                let event = if self.peer == Peer::A { "pressed" } else { "released" };
+                let event = if self.peer == Peer::A {
+                    "pressed"
+                } else {
+                    "released"
+                };
                 Ok(json!({
                     "Ok": {
                         "generation": 1,
@@ -420,6 +425,17 @@ impl OwnershipVoice {
             _ => Err(tinybus::Error::failed("unexpected hotkey fixture method")),
         }
     }
+}
+
+fn hotkey_status_json(state: &str, active: bool) -> Value {
+    json!({
+        "Ok": {
+            "state": state,
+            "generation": 1,
+            "active": active,
+            "continuity_lost": false
+        }
+    })
 }
 
 #[async_trait]
@@ -459,7 +475,9 @@ impl Interface for OwnershipVoice {
             | tinyvoice_bus::names::methods::HOTKEY_FEED
             | tinyvoice_bus::names::methods::HOTKEY_READ
             | tinyvoice_bus::names::methods::HOTKEY_STOP => self.call_hotkey(method, args),
-            _ => Err(tinybus::Error::failed("unexpected ownership fixture method")),
+            _ => Err(tinybus::Error::failed(
+                "unexpected ownership fixture method",
+            )),
         }
     }
 }
@@ -763,6 +781,7 @@ async fn vad_session_stays_with_its_creator_across_a_live_public_alias_handover(
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn recorder_session_stays_with_its_creator_across_a_live_public_alias_handover() {
     let fixture = handoff_fixture()
         .await
@@ -1100,6 +1119,7 @@ async fn canceled_capture_start_does_not_leave_an_unowned_stream() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn owned_hotkey_session_stays_with_its_creator_across_alias_handover() {
     let fixture = handoff_fixture()
         .await
@@ -1274,6 +1294,7 @@ async fn owned_hotkey_session_stays_with_its_creator_across_alias_handover() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn owned_resources_fail_closed_after_their_peer_detaches() {
     let fixture = handoff_fixture()
         .await
