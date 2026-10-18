@@ -82,7 +82,7 @@ class SdkVersionTests(unittest.TestCase):
         self.assertIn("not published to crates.io", readme)
         self.assertIn("path dependency", readme)
         self.assertIn("Git checkout", readme)
-        self.assertIn("registry package", readme)
+        self.assertIn("Registry packaging", readme)
 
     def test_parent_tree_gitlink_names_exact_published_source_without_vendor_manifest(self):
         tree = subprocess.run(
