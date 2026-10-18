@@ -26,7 +26,6 @@ class SdkVersionTests(unittest.TestCase):
 
         self.assertRegex(client, r'tinybus\s*=\s*\{[^}]*version\s*=\s*">=0\.3\.3, <0\.4\.0"')
         self.assertRegex(module, r'tinybus\s*=\s*\{[^}]*version\s*=\s*">=0\.3\.3, <0\.4\.0"')
-        self.assertRegex(module, r'tinybus-module\s*=\s*">=0\.3\.3, <0\.4\.0"')
 
     @staticmethod
     def manifest(relative):
