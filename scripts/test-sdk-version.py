@@ -19,6 +19,15 @@ class SdkVersionTests(unittest.TestCase):
         self.assertRegex(module, r'tinybus\s*=\s*\{[^}]*version\s*=\s*">=0\.3\.3, <0\.4"')
         self.assertRegex(module, r'tinybus-module\s*=\s*">=0\.3\.3, <0\.4"')
 
+    def test_client_fixtures_advertise_tinyvoice_module_version_033(self):
+        for relative in (
+            "crates/tinyvoice-client/src/lib_tests.rs",
+            "crates/tinyvoice-client/src/lib_ownership_tests.rs",
+        ):
+            with self.subTest(fixture=relative):
+                source = (ROOT / relative).read_text()
+                self.assertIn('version: "0.3.3",', source)
+
     def test_parent_tree_gitlink_names_exact_published_source_without_vendor_manifest(self):
         tree = subprocess.run(
             ["git", "ls-tree", "HEAD", "--", "vendor/tinybus"],
