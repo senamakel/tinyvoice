@@ -894,12 +894,16 @@ async fn timed_out_capture_start_does_not_leave_an_unowned_stream() {
         handoff_fixture_with_capture_start_gate(Some(gate.clone()), Some(Duration::from_secs(1)))
             .await
             .expect("start gated capture service");
-    let client = fixture.client.clone();
+    let owner = fixture
+        .client
+        .reserve_capture_owned(MicrophonePermission::Granted)
+        .await
+        .expect("reserve owned capture before startup")
+        .expect("reservation succeeds");
+    let start_owner = owner.clone();
     let (result_tx, result_rx) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {
-        let result = client
-            .start_capture_owned(MicrophonePermission::Granted)
-            .await;
+        let result = start_owner.start().await;
         let _ = result_tx.send(result);
     });
 
@@ -918,12 +922,17 @@ async fn timed_out_capture_start_does_not_leave_an_unowned_stream() {
         "the start RPC must hit its configured deadline"
     );
 
-    // A timeout only stops the caller's wait. The in-flight service operation
-    // can still publish the stream after the caller lost the private handle.
-    gate.release.notify_one();
-    tokio::time::timeout(Duration::from_secs(5), gate.completed.notified())
+    let close_owner = owner.clone();
+    let close_task = tokio::spawn(async move { close_owner.close().await });
+    tokio::time::timeout(Duration::from_secs(5), gate.stop_entered.notified())
         .await
-        .expect("the delayed service finishes publishing the stream");
+        .expect("explicit close reaches the pending reservation");
+    gate.release.notify_one();
+    let close_result = tokio::time::timeout(Duration::from_secs(5), close_task)
+        .await
+        .expect("explicit close waits for startup cleanup")
+        .expect("close task completes");
+    assert_eq!(close_result, Ok(Ok(())));
     let late_poll = fixture
         .client
         .poll_capture(CapturePollRequest {
@@ -931,16 +940,9 @@ async fn timed_out_capture_start_does_not_leave_an_unowned_stream() {
             max_chunks: 1,
         })
         .await;
-    let late_stream_is_live = matches!(late_poll, Ok(Ok(_)));
-    let cleanup = fixture
-        .client
-        .stop_capture(CaptureHandle(CAPTURE_ID.to_owned()))
-        .await;
-
-    assert!(cleanup.is_ok(), "the fixture cleans up any late stream");
     assert!(
-        !late_stream_is_live,
-        "a timed-out owned start must not leave an unowned live stream"
+        matches!(late_poll, Ok(Err(CaptureError::UnknownHandle))),
+        "closing the retained owner after timeout leaves no late stream"
     );
     assert_eq!(
         methods(&fixture.state_a),
@@ -960,11 +962,15 @@ async fn canceled_capture_start_does_not_leave_an_unowned_stream() {
     let fixture = handoff_fixture_with_capture_start_gate(Some(gate.clone()), None)
         .await
         .expect("start gated capture service");
-    let client = fixture.client.clone();
+    let owner = fixture
+        .client
+        .reserve_capture_owned(MicrophonePermission::Granted)
+        .await
+        .expect("reserve owned capture before startup")
+        .expect("reservation succeeds");
+    let start_owner = owner.clone();
     let start_task = tokio::spawn(async move {
-        client
-            .start_capture_owned(MicrophonePermission::Granted)
-            .await
+        start_owner.start().await
     });
 
     tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
@@ -977,10 +983,17 @@ async fn canceled_capture_start_does_not_leave_an_unowned_stream() {
         .expect_err("the caller task is canceled")
         .is_cancelled();
 
-    gate.release.notify_one();
-    tokio::time::timeout(Duration::from_secs(5), gate.completed.notified())
+    let close_owner = owner.clone();
+    let close_task = tokio::spawn(async move { close_owner.close().await });
+    tokio::time::timeout(Duration::from_secs(5), gate.stop_entered.notified())
         .await
-        .expect("the delayed service finishes publishing the stream");
+        .expect("explicit close reaches the pending reservation");
+    gate.release.notify_one();
+    let close_result = tokio::time::timeout(Duration::from_secs(5), close_task)
+        .await
+        .expect("explicit close waits for startup cleanup")
+        .expect("close task completes");
+    assert_eq!(close_result, Ok(Ok(())));
     let late_poll = fixture
         .client
         .poll_capture(CapturePollRequest {
@@ -988,16 +1001,10 @@ async fn canceled_capture_start_does_not_leave_an_unowned_stream() {
             max_chunks: 1,
         })
         .await;
-    let late_stream_is_live = matches!(late_poll, Ok(Ok(_)));
-    let cleanup = fixture
-        .client
-        .stop_capture(CaptureHandle(CAPTURE_ID.to_owned()))
-        .await;
     assert!(aborted, "the caller's start future was canceled");
-    assert!(cleanup.is_ok(), "the fixture cleans up any late stream");
     assert!(
-        !late_stream_is_live,
-        "a canceled owned start must not leave an unowned live stream"
+        matches!(late_poll, Ok(Err(CaptureError::UnknownHandle))),
+        "closing the retained owner after cancellation leaves no late stream"
     );
 }
 
