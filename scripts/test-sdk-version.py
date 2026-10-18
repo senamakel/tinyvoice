@@ -19,33 +19,19 @@ class SdkVersionTests(unittest.TestCase):
         self.assertRegex(module, r'tinybus\s*=\s*\{[^}]*version\s*=\s*">=0\.3\.3, <0\.4"')
         self.assertRegex(module, r'tinybus-module\s*=\s*">=0\.3\.3, <0\.4"')
 
-    def test_parent_gitlink_names_exact_published_source_without_vendor_manifest(self):
-        indexed = subprocess.run(
-            ["git", "ls-files", "--stage", "--", "vendor/tinybus"],
+    def test_parent_tree_gitlink_names_exact_published_source_without_vendor_manifest(self):
+        tree = subprocess.run(
+            ["git", "ls-tree", "HEAD", "--", "vendor/tinybus"],
             cwd=ROOT,
             check=True,
             capture_output=True,
             text=True,
         ).stdout
-        indexed_commit = re.search(r"^160000 ([0-9a-f]{40}) 0\t", indexed, re.M)
-        if indexed_commit and indexed_commit[1] == TINYBUS_033:
-            return
-
-        # During source work the pointer may be changed before its gitlink is
-        # staged. Inspect the parent tree diff, never the submodule manifest:
-        # this keeps the guard runnable in a clean, nonrecursive checkout.
-        diff = subprocess.run(
-            ["git", "diff", "--raw", "HEAD", "--", "vendor/tinybus"],
-            cwd=ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
-        changed_commit = re.search(r"^:160000 160000 [0-9a-f]+ ([0-9a-f]{40}) ", diff, re.M)
-        self.assertEqual(
-            changed_commit[1] if changed_commit else indexed_commit[1] if indexed_commit else None,
-            TINYBUS_033,
+        pinned_commit = re.search(
+            r"^160000 commit ([0-9a-f]{40})\tvendor/tinybus$", tree, re.M
         )
+        self.assertIsNotNone(pinned_commit, "parent tree must contain the TinyBus gitlink")
+        self.assertEqual(pinned_commit[1], TINYBUS_033)
 
     def test_release_callers_use_reviewed_canonical_workflow_commit(self):
         release = (ROOT / ".github/workflows/release.yml").read_text()
