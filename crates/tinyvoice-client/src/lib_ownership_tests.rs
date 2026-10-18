@@ -87,6 +87,8 @@ struct PeerState {
     vad_open: bool,
     recorders: HashMap<u64, SessionStatus>,
     capture_reserved: bool,
+    capture_pending: bool,
+    capture_canceled: bool,
     capture_open: bool,
     hotkey_open: bool,
     hotkey_active: bool,
@@ -99,6 +101,7 @@ struct CaptureStartGate {
     entered: tokio::sync::Notify,
     release: tokio::sync::Notify,
     completed: tokio::sync::Notify,
+    stop_entered: tokio::sync::Notify,
 }
 
 struct OwnershipVoice {
@@ -122,12 +125,6 @@ impl Interface for OwnershipVoice {
 
     async fn call(&self, member: &MemberName, args: Value) -> tinybus::Result<Value> {
         let method = member.as_str();
-        if method == tinyvoice_bus::names::methods::CAPTURE_START {
-            if let Some(gate) = &self.capture_start_gate {
-                gate.entered.notify_one();
-                gate.release.notified().await;
-            }
-        }
         let mut state = self
             .state
             .lock()
@@ -136,6 +133,26 @@ impl Interface for OwnershipVoice {
         let values = args
             .as_array()
             .ok_or_else(|| tinybus::Error::failed("expected positional method arguments"))?;
+
+        if method == tinyvoice_bus::names::methods::CAPTURE_START {
+            if let Some(gate) = &self.capture_start_gate {
+                state.capture_pending = true;
+                drop(state);
+                gate.entered.notify_one();
+                gate.release.notified().await;
+                state = self
+                    .state
+                    .lock()
+                    .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
+                if state.capture_canceled {
+                    state.capture_pending = false;
+                    state.capture_canceled = false;
+                    state.capture_reserved = false;
+                    gate.completed.notify_one();
+                    return Ok(json!({"Err": {"code": "cancelled"}}));
+                }
+            }
+        }
 
         let result = match method {
             tinyvoice_bus::names::methods::ROUTE => match self.peer {
@@ -234,6 +251,8 @@ impl Interface for OwnershipVoice {
                 if !state.capture_reserved || handle != CAPTURE_ID {
                     return Err(tinybus::Error::failed("unknown capture reservation"));
                 }
+                state.capture_pending = false;
+                state.capture_reserved = false;
                 state.capture_open = true;
                 if let Some(gate) = &self.capture_start_gate {
                     gate.completed.notify_one();
@@ -250,19 +269,39 @@ impl Interface for OwnershipVoice {
                     .first()
                     .and_then(Value::as_object)
                     .ok_or_else(|| tinybus::Error::failed("missing capture poll request"))?;
-                ensure_capture_open(&state, request.get("handle").and_then(Value::as_str))?;
-                let sample = if self.peer == Peer::A { 0.25 } else { 0.75 };
-                json!({
-                    "Ok": {
-                        "chunks": [{"samples": [sample]}],
-                        "closed": false
-                    }
-                })
+                if request.get("handle").and_then(Value::as_str) != Some(CAPTURE_ID)
+                    || !state.capture_open
+                {
+                    json!({"Err": {"code": "unknown_handle"}})
+                } else {
+                    let sample = if self.peer == Peer::A { 0.25 } else { 0.75 };
+                    json!({
+                        "Ok": {
+                            "chunks": [{"samples": [sample]}],
+                            "closed": false
+                        }
+                    })
+                }
             }
             tinyvoice_bus::names::methods::CAPTURE_STOP => {
-                ensure_capture_open(&state, values.first().and_then(Value::as_str))?;
-                state.capture_open = false;
-                json!({"Ok": null})
+                let gate = self.capture_start_gate.clone();
+                if state.capture_pending {
+                    state.capture_canceled = true;
+                    drop(state);
+                    if let Some(gate) = gate {
+                        gate.stop_entered.notify_one();
+                        gate.completed.notified().await;
+                    }
+                    return Ok(json!({"Ok": null}));
+                }
+                if values.first().and_then(Value::as_str) == Some(CAPTURE_ID)
+                    && state.capture_open
+                {
+                    state.capture_open = false;
+                    json!({"Ok": null})
+                } else {
+                    json!({"Err": {"code": "unknown_handle"}})
+                }
             }
             tinyvoice_bus::names::methods::HOTKEY_RESERVE => {
                 state.hotkey_open = true;
