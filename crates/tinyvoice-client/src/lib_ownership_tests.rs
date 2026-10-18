@@ -86,12 +86,25 @@ struct PeerState {
     calls: Vec<(String, Value)>,
     vad_open: bool,
     recorders: HashMap<u64, SessionStatus>,
-    capture_reserved: bool,
-    capture_pending: bool,
-    capture_canceled: bool,
-    capture_open: bool,
-    hotkey_open: bool,
-    hotkey_active: bool,
+    capture: CaptureFixtureState,
+    hotkey: HotkeyFixtureState,
+}
+
+#[derive(Default)]
+enum CaptureFixtureState {
+    #[default]
+    Empty,
+    Reserved,
+    Starting { canceled: bool },
+    Live,
+}
+
+#[derive(Default)]
+enum HotkeyFixtureState {
+    #[default]
+    Empty,
+    Reserved,
+    Running { active: bool },
 }
 
 type SharedPeerState = Arc<Mutex<PeerState>>;
