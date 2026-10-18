@@ -6,16 +6,29 @@ calls. It does not depend on the host-agnostic `tinyvoice` implementation or
 the loadable `tinyvoice-module` crate.
 
 Construct it with `TinyVoiceClient::new(module_client)` using the host's one
-configured `ModuleClient`. That keeps module loading, compatibility checks,
-deadlines, and redacted failure reporting on the same path the host already
-configures; the client must not open a second bus connection or create a
-private resolver. Its methods preserve each contract member's positional
-tuple and typed reply.
+configured `ModuleClient`. Stateless calls continue through that configured
+client and preserve each contract member's positional tuple and typed reply.
+Stateful owners call TinyBus 0.3.2's ordinary `ModuleClient::bind` once at
+creation and retain the resulting private peer-pinned client for later calls.
+This is ordinary bus routing: it pins the current unique peer through alias
+handover, but does not load an artifact proof or make an attestation claim.
 
-`VadSession` and `RecorderSession` are explicit async leases. Closing them calls
-the corresponding module method; dropping a Rust handle does not imply remote
-cleanup. OpenHuman keeps host policy such as volume clamping and conversion
-from persisted server configuration into `VadConfig` in its own adapter.
+`VadSession`, `RecorderSession`, `OwnedCaptureStream`, and
+`OwnedHotkeySession` are explicit async leases. Their opaque resource handles
+stay private. Closing an owner calls the corresponding module method on its
+pinned peer; dropping a Rust handle does not imply remote cleanup. The existing
+flat capture and hotkey methods remain compatibility calls and do not pin a
+resource owner. OpenHuman keeps host policy such as volume clamping, microphone
+permission, hotkey policy, and conversion from persisted configuration into
+`VadConfig` in its own adapter.
+
+`start_capture_owned` binds before reserving and starting the native stream,
+then returns an `OwnedCaptureStream` for polling and explicit close. A timeout
+or cancellation during `CAPTURE_START` occurs before that owner is returned;
+callers that need the reservation handle before native startup can keep using
+the flat `reserve_capture`, `start_capture`, and `stop_capture` methods. Those
+legacy methods preserve the caller's explicit handle, but use whichever peer
+the supplied ordinary client addresses at each call.
 
 The client keeps the configured `ModuleClient` deadline and reporting sink.
 It does not add a second timeout. `VoiceCallError::kind()` exposes the closed
@@ -24,10 +37,10 @@ failure category; its `Debug` and `Display` omit remote prose. The explicit
 and require a caller-owned redaction policy before display or logging.
 
 The recording-broker tests use only TinyBus's in-memory transport. They record
-actual service invocations and verify the wire arguments and returned types;
-they do not load a published artifact, access a microphone, or contact a
-backend.
+actual service invocations and verify wire arguments, returned types, peer
+handover, and owner-close behavior; they do not load a published artifact,
+access a microphone, or contact a backend.
 
-The manifest's TinyBus version range targets the published 0.2.2 client API.
-Pin the final constraint to the TinyBus 0.3.x runtime when the runtime SDK and
-vendored gitlink are aligned.
+The client and module manifests target the published TinyBus 0.3.2 line, and
+the vendored gitlink pins that source. The original Cargo lockfiles still need
+refreshing under the authorized Cargo validation slot.
