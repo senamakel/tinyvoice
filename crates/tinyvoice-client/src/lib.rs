@@ -382,6 +382,53 @@ impl TinyVoiceClient {
         .await
     }
 
+    /// Reserve and start a continuous stream on one pinned module peer.
+    ///
+    /// The returned stream keeps the peer selected for this creation call for
+    /// all polls and explicit cleanup. Host microphone permission remains an
+    /// input supplied by the caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized `TinyBus` failure; a capture refusal remains the
+    /// typed inner [`CaptureError`].
+    pub async fn start_capture_owned(
+        &self,
+        permission: MicrophonePermission,
+    ) -> Result<CaptureResult<OwnedCaptureStream>> {
+        let client = self.bind().await?;
+        let reservation = client
+            .call(
+                tinyvoice_bus::names::methods::RESERVE_CAPTURE,
+                (RecordingStartRequest {
+                    permission,
+                    handle: None,
+                },),
+            )
+            .await?;
+        let handle = match reservation {
+            Ok(handle) => handle,
+            Err(error) => return Ok(Err(error)),
+        };
+        let stream: CaptureResult<CaptureStream> = client
+            .call(
+                tinyvoice_bus::names::methods::CAPTURE_START,
+                (RecordingStartRequest {
+                    permission,
+                    handle: Some(handle),
+                },),
+            )
+            .await?;
+        match stream {
+            Ok(stream) => Ok(Ok(OwnedCaptureStream {
+                client,
+                handle: stream.handle,
+                format: stream.format,
+            })),
+            Err(error) => Ok(Err(error)),
+        }
+    }
+
     /// Read a bounded batch from a continuous capture lease.
     ///
     /// # Errors
@@ -433,6 +480,30 @@ impl TinyVoiceClient {
             (HotkeyReserveRequest { request },),
         )
         .await
+    }
+
+    /// Reserve a host-fed or native hotkey lease on one pinned module peer.
+    ///
+    /// Host permission and platform policy remain with the caller. The
+    /// returned owner carries its private handle through start, feed, read,
+    /// and explicit close.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized `TinyBus` failure; a listener refusal remains the
+    /// typed inner [`HotkeyError`].
+    pub async fn reserve_hotkey_owned(
+        &self,
+        request: HotkeyRequest,
+    ) -> Result<std::result::Result<OwnedHotkeySession, HotkeyError>> {
+        let client = self.bind().await?;
+        let handle = client
+            .call(
+                tinyvoice_bus::names::methods::HOTKEY_RESERVE,
+                (HotkeyReserveRequest { request },),
+            )
+            .await?;
+        Ok(handle.map(|handle| OwnedHotkeySession { client, handle }))
     }
 
     /// Start a reserved listener, preserving the module's typed result.
@@ -640,6 +711,69 @@ impl VadSession {
     }
 }
 
+/// A continuous stream bound to the module peer that started it.
+///
+/// The opaque bus handle is private and omitted from debug output. Call
+/// [`close`](Self::close) explicitly; dropping the value performs no remote
+/// cleanup.
+#[derive(Clone)]
+pub struct OwnedCaptureStream {
+    client: TinyVoiceClient,
+    handle: CaptureHandle,
+    format: CaptureFormat,
+}
+
+impl fmt::Debug for OwnedCaptureStream {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OwnedCaptureStream")
+            .field("handle", &"<redacted>")
+            .field("format", &self.format)
+            .finish_non_exhaustive()
+    }
+}
+
+impl OwnedCaptureStream {
+    /// Return the native sample format selected when the stream started.
+    #[must_use]
+    pub const fn format(&self) -> CaptureFormat {
+        self.format
+    }
+
+    /// Read a bounded batch from this stream's pinned module peer.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized `TinyBus` failure; a capture refusal remains the
+    /// typed inner [`CaptureError`].
+    pub async fn poll(&self, max_chunks: usize) -> Result<CaptureResult<CaptureBatch>> {
+        self.client
+            .call(
+                tinyvoice_bus::names::methods::CAPTURE_POLL,
+                (CapturePollRequest {
+                    handle: self.handle.clone(),
+                    max_chunks,
+                },),
+            )
+            .await
+    }
+
+    /// Stop this stream on its pinned peer after native cleanup completes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized `TinyBus` failure; a capture refusal remains the
+    /// typed inner [`CaptureError`].
+    pub async fn close(&self) -> Result<CaptureResult<()>> {
+        self.client
+            .call(
+                tinyvoice_bus::names::methods::CAPTURE_STOP,
+                (self.handle.clone(),),
+            )
+            .await
+    }
+}
+
 /// A module-owned hotkey recording session. Its opaque id is omitted from
 /// debug output.
 ///
@@ -667,11 +801,12 @@ impl RecorderSession {
     ///
     /// Returns a sanitized `TinyBus` failure.
     pub async fn open(client: &TinyVoiceClient) -> Result<Self> {
+        let client = client.bind().await?;
         let id = client
             .call(tinyvoice_bus::names::methods::SESSION_OPEN, ())
             .await?;
         Ok(Self {
-            client: client.clone(),
+            client,
             id,
         })
     }
@@ -715,6 +850,108 @@ impl RecorderSession {
     pub async fn close(&self) -> Result<()> {
         self.client
             .call(tinyvoice_bus::names::methods::SESSION_CLOSE, (self.id,))
+            .await
+    }
+}
+
+/// A hotkey lease bound to the module peer that reserved it.
+///
+/// The opaque bus handle is private and omitted from debug output. Call
+/// [`close`](Self::close) explicitly; dropping this value performs no remote
+/// cleanup.
+#[derive(Clone)]
+pub struct OwnedHotkeySession {
+    client: TinyVoiceClient,
+    handle: HotkeyHandle,
+}
+
+impl fmt::Debug for OwnedHotkeySession {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OwnedHotkeySession")
+            .field("handle", &"<redacted>")
+            .finish_non_exhaustive()
+    }
+}
+
+impl OwnedHotkeySession {
+    /// Start the reserved listener.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized `TinyBus` failure; a listener refusal remains the
+    /// typed inner [`HotkeyError`].
+    pub async fn start(&self) -> Result<std::result::Result<HotkeyReply, HotkeyError>> {
+        self.client
+            .call(
+                tinyvoice_bus::names::methods::HOTKEY_START,
+                (HotkeyStartRequest {
+                    handle: self.handle.clone(),
+                },),
+            )
+            .await
+    }
+
+    /// Read a retained activation batch, acknowledging only the supplied batch.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized `TinyBus` failure; a listener refusal remains the
+    /// typed inner [`HotkeyError`].
+    pub async fn read(
+        &self,
+        acknowledged_batch: Option<u64>,
+    ) -> Result<std::result::Result<HotkeyBatch, HotkeyError>> {
+        self.client
+            .call(
+                tinyvoice_bus::names::methods::HOTKEY_READ,
+                (HotkeyReadRequest {
+                    handle: self.handle.clone(),
+                    acknowledged_batch,
+                },),
+            )
+            .await
+    }
+
+    /// Feed host-owned generic key facts to this listener.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized `TinyBus` failure; a listener refusal remains the
+    /// typed inner [`HotkeyError`].
+    pub async fn feed(
+        &self,
+        generation: u64,
+        facts: Vec<SequencedHostFact>,
+        overflow: bool,
+    ) -> Result<std::result::Result<HotkeyReply, HotkeyError>> {
+        self.client
+            .call(
+                tinyvoice_bus::names::methods::HOTKEY_FEED,
+                (HotkeyFeedRequest {
+                    handle: self.handle.clone(),
+                    generation,
+                    facts,
+                    overflow,
+                },),
+            )
+            .await
+    }
+
+    /// Stop the listener on its pinned module peer after cleanup completes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized `TinyBus` failure; a listener refusal remains the
+    /// typed inner [`HotkeyError`].
+    pub async fn close(&self) -> Result<std::result::Result<HotkeyReply, HotkeyError>> {
+        self.client
+            .call(
+                tinyvoice_bus::names::methods::HOTKEY_STOP,
+                (HotkeyHandleRequest {
+                    handle: self.handle.clone(),
+                },),
+            )
             .await
     }
 }
