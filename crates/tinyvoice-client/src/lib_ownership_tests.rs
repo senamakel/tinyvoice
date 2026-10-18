@@ -22,6 +22,8 @@ use tinyvoice_bus::{SessionAction, SessionAdvance, SessionInput, SessionPhase, S
 const MODULE_ID: &str = "tinyvoice";
 const VAD_ID: u64 = 41;
 const RECORDER_ID: u64 = 73;
+const CAPTURE_ID: &str = "capture-shared";
+const HOTKEY_ID: &str = "hotkey-shared";
 
 static RELEASE: ReleaseRecord = ReleaseRecord {
     id: MODULE_ID,
@@ -83,6 +85,10 @@ struct PeerState {
     calls: Vec<(String, Value)>,
     vad_open: bool,
     recorders: HashMap<u64, SessionStatus>,
+    capture_reserved: bool,
+    capture_open: bool,
+    hotkey_open: bool,
+    hotkey_active: bool,
 }
 
 type SharedPeerState = Arc<Mutex<PeerState>>;
@@ -197,6 +203,106 @@ impl Interface for OwnershipVoice {
                     .ok_or_else(|| tinybus::Error::failed("unknown recorder id"))?;
                 Value::Null
             }
+            tinyvoice_bus::names::methods::RESERVE_CAPTURE => {
+                state.capture_reserved = true;
+                json!({"Ok": CAPTURE_ID})
+            }
+            tinyvoice_bus::names::methods::CAPTURE_START => {
+                let request = values
+                    .first()
+                    .and_then(Value::as_object)
+                    .ok_or_else(|| tinybus::Error::failed("missing capture start request"))?;
+                let handle = request
+                    .get("handle")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| tinybus::Error::failed("missing capture reservation"))?;
+                if !state.capture_reserved || handle != CAPTURE_ID {
+                    return Err(tinybus::Error::failed("unknown capture reservation"));
+                }
+                state.capture_open = true;
+                json!({
+                    "Ok": {
+                        "handle": CAPTURE_ID,
+                        "format": {"source_rate": 48_000, "channels": 1}
+                    }
+                })
+            }
+            tinyvoice_bus::names::methods::CAPTURE_POLL => {
+                let request = values
+                    .first()
+                    .and_then(Value::as_object)
+                    .ok_or_else(|| tinybus::Error::failed("missing capture poll request"))?;
+                ensure_capture_open(&state, request.get("handle").and_then(Value::as_str))?;
+                let sample = if self.peer == Peer::A { 0.25 } else { 0.75 };
+                json!({
+                    "Ok": {
+                        "chunks": [{"samples": [sample]}],
+                        "closed": false
+                    }
+                })
+            }
+            tinyvoice_bus::names::methods::CAPTURE_STOP => {
+                ensure_capture_open(&state, values.first().and_then(Value::as_str))?;
+                state.capture_open = false;
+                json!({"Ok": null})
+            }
+            tinyvoice_bus::names::methods::HOTKEY_RESERVE => {
+                state.hotkey_open = true;
+                json!({"Ok": HOTKEY_ID})
+            }
+            tinyvoice_bus::names::methods::HOTKEY_START => {
+                ensure_hotkey_open(&state, values.first().and_then(Value::as_object))?;
+                json!({
+                    "Ok": {
+                        "state": "running",
+                        "generation": 1,
+                        "active": false,
+                        "continuity_lost": false
+                    }
+                })
+            }
+            tinyvoice_bus::names::methods::HOTKEY_FEED => {
+                ensure_hotkey_open(&state, values.first().and_then(Value::as_object))?;
+                state.hotkey_active = true;
+                json!({
+                    "Ok": {
+                        "state": "running",
+                        "generation": 1,
+                        "active": true,
+                        "continuity_lost": false
+                    }
+                })
+            }
+            tinyvoice_bus::names::methods::HOTKEY_READ => {
+                ensure_hotkey_open(&state, values.first().and_then(Value::as_object))?;
+                let event = if self.peer == Peer::A {
+                    "pressed"
+                } else {
+                    "released"
+                };
+                let active = self.peer == Peer::B && state.hotkey_active;
+                json!({
+                    "Ok": {
+                        "generation": 1,
+                        "batch": 1,
+                        "events": [{"generation": 1, "sequence": 1, "event": event}],
+                        "reset": false,
+                        "active": active
+                    }
+                })
+            }
+            tinyvoice_bus::names::methods::HOTKEY_STOP => {
+                ensure_hotkey_open(&state, values.first().and_then(Value::as_object))?;
+                state.hotkey_open = false;
+                json!({
+                    "Ok": {
+                        "state": "stopped",
+                        "generation": 1,
+                        "active": false,
+                        "continuity_lost": false
+                    }
+                })
+            }
             _ => {
                 return Err(tinybus::Error::failed(
                     "unexpected ownership fixture method",
@@ -220,6 +326,30 @@ fn ensure_vad_open(state: &PeerState, id: u64) -> tinybus::Result<()> {
         Ok(())
     } else {
         Err(tinybus::Error::failed("unknown VAD id"))
+    }
+}
+
+fn ensure_capture_open(state: &PeerState, handle: Option<&str>) -> tinybus::Result<()> {
+    if handle == Some(CAPTURE_ID) && state.capture_open {
+        Ok(())
+    } else {
+        Err(tinybus::Error::failed("unknown capture stream"))
+    }
+}
+
+fn ensure_hotkey_open(
+    state: &PeerState,
+    request: Option<&serde_json::Map<String, Value>>,
+) -> tinybus::Result<()> {
+    if request
+        .and_then(|request| request.get("handle"))
+        .and_then(Value::as_str)
+        == Some(HOTKEY_ID)
+        && state.hotkey_open
+    {
+        Ok(())
+    } else {
+        Err(tinybus::Error::failed("unknown hotkey handle"))
     }
 }
 
@@ -585,5 +715,496 @@ async fn recorder_session_stays_with_its_creator_across_a_live_public_alias_hand
         ]
         .map(str::to_owned),
         "B receives its own usable calls and no call from A's projection"
+    );
+}
+
+#[tokio::test]
+async fn owned_capture_stream_stays_with_its_creator_across_alias_handover() {
+    let fixture = handoff_fixture()
+        .await
+        .expect("start both service peers on one broker");
+    let a = fixture
+        .client
+        .start_capture_owned(MicrophonePermission::Granted)
+        .await
+        .expect("start capture on A")
+        .expect("A capture start succeeds");
+    assert_eq!(
+        a.format(),
+        CaptureFormat {
+            source_rate: 48_000,
+            channels: 1,
+        }
+    );
+
+    fixture
+        .move_public_alias_to_b()
+        .await
+        .expect("move public name while A remains connected");
+    assert_eq!(
+        fixture
+            .direct_a
+            .route("prove service A is still live")
+            .await
+            .expect("A stays directly callable by unique name"),
+        VoiceIntent::Pause
+    );
+    assert_eq!(
+        fixture
+            .client
+            .route("prove replacement service B is usable")
+            .await
+            .expect("the public alias now reaches B"),
+        VoiceIntent::Resume
+    );
+
+    let b = fixture
+        .client
+        .start_capture_owned(MicrophonePermission::Granted)
+        .await
+        .expect("start colliding capture on B")
+        .expect("B capture start succeeds");
+    assert_eq!(a.handle, b.handle, "capture handles collide across peers");
+    let b_batch = b.poll(1).await;
+    assert_eq!(
+        b_batch,
+        Ok(Ok(CaptureBatch {
+            chunks: vec![RawChunk {
+                samples: vec![0.75]
+            }],
+            closed: false,
+        })),
+        "B's stream returns a usable B-specific capture canary"
+    );
+
+    let a_batch = a.poll(1).await;
+    let a_close = a.close().await;
+    let b_still_open = b.poll(1).await;
+    assert_eq!(
+        (a_batch, a_close, b_still_open),
+        (
+            Ok(Ok(CaptureBatch {
+                chunks: vec![RawChunk {
+                    samples: vec![0.25]
+                }],
+                closed: false,
+            })),
+            Ok(Ok(())),
+            Ok(Ok(CaptureBatch {
+                chunks: vec![RawChunk {
+                    samples: vec![0.75]
+                }],
+                closed: false,
+            })),
+        ),
+        "A polling/close stay on A, and closing A leaves B live"
+    );
+    assert_eq!(
+        methods(&fixture.state_a),
+        [
+            tinyvoice_bus::names::methods::RESERVE_CAPTURE,
+            tinyvoice_bus::names::methods::CAPTURE_START,
+            tinyvoice_bus::names::methods::ROUTE,
+            tinyvoice_bus::names::methods::CAPTURE_POLL,
+            tinyvoice_bus::names::methods::CAPTURE_STOP,
+        ]
+        .map(str::to_owned)
+    );
+    assert_eq!(
+        methods(&fixture.state_b),
+        [
+            tinyvoice_bus::names::methods::ROUTE,
+            tinyvoice_bus::names::methods::RESERVE_CAPTURE,
+            tinyvoice_bus::names::methods::CAPTURE_START,
+            tinyvoice_bus::names::methods::CAPTURE_POLL,
+            tinyvoice_bus::names::methods::CAPTURE_POLL,
+        ]
+        .map(str::to_owned),
+        "B receives its own usable calls and no call from A's projection"
+    );
+}
+
+#[tokio::test]
+async fn owned_hotkey_session_stays_with_its_creator_across_alias_handover() {
+    let fixture = handoff_fixture()
+        .await
+        .expect("start both service peers on one broker");
+    let request = HotkeyRequest {
+        key: "Fn".to_owned(),
+        mode: ActivationMode::Push,
+        source: HotkeySource::Host,
+    };
+    let a = fixture
+        .client
+        .reserve_hotkey_owned(request.clone())
+        .await
+        .expect("reserve hotkey on A")
+        .expect("A hotkey reservation succeeds");
+
+    fixture
+        .move_public_alias_to_b()
+        .await
+        .expect("move public name while A remains connected");
+    assert_eq!(
+        fixture
+            .direct_a
+            .route("prove service A is still live")
+            .await
+            .expect("A stays directly callable by unique name"),
+        VoiceIntent::Pause
+    );
+    assert_eq!(
+        fixture
+            .client
+            .route("prove replacement service B is usable")
+            .await
+            .expect("the public alias now reaches B"),
+        VoiceIntent::Resume
+    );
+
+    let b = fixture
+        .client
+        .reserve_hotkey_owned(request)
+        .await
+        .expect("reserve colliding hotkey on B")
+        .expect("B hotkey reservation succeeds");
+    assert_eq!(a.handle, b.handle, "hotkey handles collide across peers");
+    let b_started = b.start().await;
+    let b_feed = b
+        .feed(
+            1,
+            vec![SequencedHostFact {
+                sequence: 1,
+                fact: HostKeyFact::Down,
+            }],
+            false,
+        )
+        .await;
+    let b_batch = b.read(None).await;
+    assert_eq!(
+        (b_started, b_feed, b_batch),
+        (
+            Ok(Ok(HotkeyReply {
+                state: tinyvoice_bus::HotkeyState::Running,
+                generation: Some(1),
+                active: false,
+                continuity_lost: false,
+            })),
+            Ok(Ok(HotkeyReply {
+                state: tinyvoice_bus::HotkeyState::Running,
+                generation: Some(1),
+                active: true,
+                continuity_lost: false,
+            })),
+            Ok(Ok(HotkeyBatch {
+                generation: 1,
+                batch: 1,
+                events: vec![tinyvoice_bus::hotkey::SequencedHotkeyEvent {
+                    generation: 1,
+                    sequence: 1,
+                    event: HotkeyEvent::Released,
+                }],
+                reset: false,
+                active: true,
+            })),
+        ),
+        "B's start/feed/read path returns usable B-specific canaries"
+    );
+
+    let a_started = a.start().await;
+    let a_feed = a
+        .feed(
+            1,
+            vec![SequencedHostFact {
+                sequence: 1,
+                fact: HostKeyFact::Down,
+            }],
+            false,
+        )
+        .await;
+    let a_batch = a.read(None).await;
+    let a_close = a.close().await;
+    let b_still_open = b.read(None).await;
+    assert_eq!(
+        (a_started, a_feed, a_batch, a_close, b_still_open),
+        (
+            Ok(Ok(HotkeyReply {
+                state: tinyvoice_bus::HotkeyState::Running,
+                generation: Some(1),
+                active: false,
+                continuity_lost: false,
+            })),
+            Ok(Ok(HotkeyReply {
+                state: tinyvoice_bus::HotkeyState::Running,
+                generation: Some(1),
+                active: true,
+                continuity_lost: false,
+            })),
+            Ok(Ok(HotkeyBatch {
+                generation: 1,
+                batch: 1,
+                events: vec![tinyvoice_bus::hotkey::SequencedHotkeyEvent {
+                    generation: 1,
+                    sequence: 1,
+                    event: HotkeyEvent::Pressed,
+                }],
+                reset: false,
+                active: false,
+            })),
+            Ok(Ok(HotkeyReply {
+                state: tinyvoice_bus::HotkeyState::Stopped,
+                generation: Some(1),
+                active: false,
+                continuity_lost: false,
+            })),
+            Ok(Ok(HotkeyBatch {
+                generation: 1,
+                batch: 1,
+                events: vec![tinyvoice_bus::hotkey::SequencedHotkeyEvent {
+                    generation: 1,
+                    sequence: 1,
+                    event: HotkeyEvent::Released,
+                }],
+                reset: false,
+                active: true,
+            })),
+        ),
+        "A's listener operations stay on A, and closing A leaves B live"
+    );
+    assert_eq!(
+        methods(&fixture.state_a),
+        [
+            tinyvoice_bus::names::methods::HOTKEY_RESERVE,
+            tinyvoice_bus::names::methods::ROUTE,
+            tinyvoice_bus::names::methods::HOTKEY_START,
+            tinyvoice_bus::names::methods::HOTKEY_FEED,
+            tinyvoice_bus::names::methods::HOTKEY_READ,
+            tinyvoice_bus::names::methods::HOTKEY_STOP,
+        ]
+        .map(str::to_owned)
+    );
+    assert_eq!(
+        methods(&fixture.state_b),
+        [
+            tinyvoice_bus::names::methods::ROUTE,
+            tinyvoice_bus::names::methods::HOTKEY_RESERVE,
+            tinyvoice_bus::names::methods::HOTKEY_START,
+            tinyvoice_bus::names::methods::HOTKEY_FEED,
+            tinyvoice_bus::names::methods::HOTKEY_READ,
+            tinyvoice_bus::names::methods::HOTKEY_READ,
+        ]
+        .map(str::to_owned),
+        "B receives its own usable calls and no call from A's projection"
+    );
+}
+
+#[tokio::test]
+async fn owned_resources_fail_closed_after_their_peer_detaches() {
+    let fixture = handoff_fixture()
+        .await
+        .expect("start both service peers on one broker");
+    let a_vad = fixture
+        .client
+        .open_vad(VadConfig::default())
+        .await
+        .expect("open A VAD");
+    let a_recorder = RecorderSession::open(&fixture.client)
+        .await
+        .expect("open A recorder");
+    let a_capture = fixture
+        .client
+        .start_capture_owned(MicrophonePermission::Granted)
+        .await
+        .expect("start A capture")
+        .expect("A capture starts");
+    let a_hotkey = fixture
+        .client
+        .reserve_hotkey_owned(HotkeyRequest {
+            key: "Fn".to_owned(),
+            mode: ActivationMode::Push,
+            source: HotkeySource::Host,
+        })
+        .await
+        .expect("reserve A hotkey")
+        .expect("A hotkey reserves");
+
+    fixture
+        .move_public_alias_to_b()
+        .await
+        .expect("move alias while A remains live");
+    assert_eq!(
+        fixture
+            .direct_a
+            .route("A unique-peer positive control")
+            .await
+            .expect("A remains callable before detach"),
+        VoiceIntent::Pause
+    );
+    let b_vad = fixture
+        .client
+        .open_vad(VadConfig::default())
+        .await
+        .expect("open colliding B VAD");
+    let b_recorder = RecorderSession::open(&fixture.client)
+        .await
+        .expect("open colliding B recorder");
+    let b_capture = fixture
+        .client
+        .start_capture_owned(MicrophonePermission::Granted)
+        .await
+        .expect("start colliding B capture")
+        .expect("B capture starts");
+    let b_hotkey = fixture
+        .client
+        .reserve_hotkey_owned(HotkeyRequest {
+            key: "Fn".to_owned(),
+            mode: ActivationMode::Push,
+            source: HotkeySource::Host,
+        })
+        .await
+        .expect("reserve colliding B hotkey")
+        .expect("B hotkey reserves");
+    assert_eq!(a_vad.id, b_vad.id);
+    assert_eq!(a_recorder.id, b_recorder.id);
+    assert_eq!(a_capture.handle, b_capture.handle);
+    assert_eq!(a_hotkey.handle, b_hotkey.handle);
+
+    b_recorder
+        .advance(SessionInput::Run)
+        .await
+        .expect("B recorder responds");
+    b_hotkey.start().await.expect("B hotkey starts");
+    b_hotkey
+        .feed(
+            1,
+            vec![SequencedHostFact {
+                sequence: 1,
+                fact: HostKeyFact::Down,
+            }],
+            false,
+        )
+        .await
+        .expect("B accepts host-owned input");
+    assert_eq!(
+        b_vad.push(20, &[0.8]).await.expect("B VAD is usable").len(),
+        1
+    );
+    assert!(
+        b_capture
+            .poll(1)
+            .await
+            .expect("B capture is usable")
+            .is_ok()
+    );
+    assert!(
+        b_hotkey
+            .read(None)
+            .await
+            .expect("B hotkey is usable")
+            .is_ok()
+    );
+
+    fixture
+        .service_a
+        .close()
+        .await
+        .expect("detach A's service connection");
+    assert_eq!(
+        fixture
+            .client
+            .route("B alias remains usable after A detaches")
+            .await
+            .expect("B remains the public alias owner"),
+        VoiceIntent::Resume
+    );
+
+    let a_vad_push = a_vad.push(20, &[0.8]).await;
+    let a_vad_speaking = a_vad.is_speaking().await;
+    let a_vad_reset = a_vad.reset().await;
+    let a_vad_close = a_vad.close().await;
+    let a_recorder_advance = a_recorder.advance(SessionInput::Run).await;
+    let a_recorder_status = a_recorder.status().await;
+    let a_recorder_close = a_recorder.close().await;
+    let a_capture_poll = a_capture.poll(1).await;
+    let a_capture_close = a_capture.close().await;
+    let a_hotkey_start = a_hotkey.start().await;
+    let a_hotkey_feed = a_hotkey
+        .feed(
+            1,
+            vec![SequencedHostFact {
+                sequence: 1,
+                fact: HostKeyFact::Down,
+            }],
+            false,
+        )
+        .await;
+    let a_hotkey_read = a_hotkey.read(None).await;
+    let a_hotkey_close = a_hotkey.close().await;
+    assert!(
+        a_vad_push.is_err()
+            && a_vad_speaking.is_err()
+            && a_vad_reset.is_err()
+            && a_vad_close.is_err()
+            && a_recorder_advance.is_err()
+            && a_recorder_status.is_err()
+            && a_recorder_close.is_err()
+            && a_capture_poll.is_err()
+            && a_capture_close.is_err()
+            && a_hotkey_start.is_err()
+            && a_hotkey_feed.is_err()
+            && a_hotkey_read.is_err()
+            && a_hotkey_close.is_err(),
+        "all operations against detached A fail instead of falling back to B"
+    );
+
+    assert_eq!(
+        b_vad.is_speaking().await,
+        Ok(true),
+        "A's failed VAD operations did not reach or close B"
+    );
+    assert_eq!(
+        b_recorder.status().await,
+        Ok(SessionStatus {
+            phase: SessionPhase::Idle,
+            generation: 0,
+        }),
+        "A's failed recorder operations did not reach or close B"
+    );
+    assert!(
+        b_capture
+            .poll(1)
+            .await
+            .expect("B capture remains pinned")
+            .is_ok()
+    );
+    assert!(
+        b_hotkey
+            .read(None)
+            .await
+            .expect("B hotkey remains pinned")
+            .is_ok()
+    );
+    assert_eq!(
+        methods(&fixture.state_b),
+        [
+            tinyvoice_bus::names::methods::VAD_OPEN,
+            tinyvoice_bus::names::methods::SESSION_OPEN,
+            tinyvoice_bus::names::methods::RESERVE_CAPTURE,
+            tinyvoice_bus::names::methods::CAPTURE_START,
+            tinyvoice_bus::names::methods::HOTKEY_RESERVE,
+            tinyvoice_bus::names::methods::SESSION_ADVANCE,
+            tinyvoice_bus::names::methods::HOTKEY_START,
+            tinyvoice_bus::names::methods::HOTKEY_FEED,
+            tinyvoice_bus::names::methods::VAD_PUSH,
+            tinyvoice_bus::names::methods::CAPTURE_POLL,
+            tinyvoice_bus::names::methods::HOTKEY_READ,
+            tinyvoice_bus::names::methods::ROUTE,
+            tinyvoice_bus::names::methods::VAD_IS_SPEAKING,
+            tinyvoice_bus::names::methods::SESSION_STATUS,
+            tinyvoice_bus::names::methods::CAPTURE_POLL,
+            tinyvoice_bus::names::methods::HOTKEY_READ,
+        ]
+        .map(str::to_owned),
+        "B receives its own lifecycle calls and no A traffic after detach"
     );
 }

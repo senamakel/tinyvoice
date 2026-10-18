@@ -335,10 +335,7 @@ impl TinyVoiceClient {
         let id = client
             .call(tinyvoice_bus::names::methods::VAD_OPEN, (config,))
             .await?;
-        Ok(VadSession {
-            client,
-            id,
-        })
+        Ok(VadSession { client, id })
     }
 
     /// Reserve an opaque capture lease before native microphone startup.
@@ -805,10 +802,7 @@ impl RecorderSession {
         let id = client
             .call(tinyvoice_bus::names::methods::SESSION_OPEN, ())
             .await?;
-        Ok(Self {
-            client,
-            id,
-        })
+        Ok(Self { client, id })
     }
 
     /// Apply an input to the recording state machine.
