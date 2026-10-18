@@ -412,7 +412,8 @@ impl Interface for OwnershipVoice {
                 } else {
                     "released"
                 };
-                let active = matches!(&state.hotkey, HotkeyFixtureState::Running { active: true });
+                let active = self.peer == Peer::B
+                    && matches!(&state.hotkey, HotkeyFixtureState::Running { active: true });
                 json!({
                     "Ok": {
                         "generation": 1,
