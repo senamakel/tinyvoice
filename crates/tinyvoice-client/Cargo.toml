@@ -16,8 +16,8 @@ serde = "1"
 serde_json = "1"
 # Shared TinyVoice member names, request types, and typed replies.
 tinyvoice-bus = { version = "0.1.4", path = "../tinyvoice-bus" }
-# TinyBus 0.3.2 adds ordinary peer-pinned clients for stateful voice leases.
-tinybus = { version = ">=0.3.2, <0.4", path = "../../vendor/tinybus/crates/tinybus", default-features = false }
+# TinyBus 0.3.3 publishes the terminal stream verdict before reader EOF.
+tinybus = { version = ">=0.3.3, <0.4", path = "../../vendor/tinybus/crates/tinybus", default-features = false }
 
 [dev-dependencies]
 # Implements the async in-memory service used by the broker tests.

@@ -8,10 +8,13 @@ the loadable `tinyvoice-module` crate.
 Construct it with `TinyVoiceClient::new(module_client)` using the host's one
 configured `ModuleClient`. Stateless calls continue through that configured
 client and preserve each contract member's positional tuple and typed reply.
-Stateful owners call TinyBus 0.3.2's ordinary `ModuleClient::bind` once at
+Stateful owners call TinyBus 0.3.3's ordinary `ModuleClient::bind` once at
 creation and retain the resulting private peer-pinned client for later calls.
 This is ordinary bus routing: it pins the current unique peer through alias
 handover, but does not load an artifact proof or make an attestation claim.
+The published SDK also delivers a streamed call's terminal verdict before
+reader EOF, so successful completion and remote failure remain distinguishable
+when a host consumes a stream.
 
 `VadSession`, `RecorderSession`, `OwnedCaptureStream`, and
 `OwnedHotkeySession` are explicit async leases. Their opaque resource handles
@@ -45,5 +48,6 @@ actual service invocations and verify wire arguments, returned types, peer
 handover, and owner-close behavior; they do not load a published artifact,
 access a microphone, or contact a backend.
 
-The client and module manifests target the published TinyBus 0.3.2 line, and
-the vendored gitlink and both Cargo lockfiles resolve to that source.
+The client and module manifests target the published TinyBus 0.3.3 line. Its
+vendored gitlink resolves to the signed `v0.3.3` source commit; the workspace
+and module lockfiles are refreshed by the integration build owner.
