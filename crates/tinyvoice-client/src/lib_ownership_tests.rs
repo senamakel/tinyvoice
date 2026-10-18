@@ -125,6 +125,48 @@ impl Interface for OwnershipVoice {
 
     async fn call(&self, member: &MemberName, args: Value) -> tinybus::Result<Value> {
         let method = member.as_str();
+        if method == tinyvoice_bus::names::methods::CAPTURE_STOP {
+            enum StopAction {
+                Pending,
+                Stopped,
+                Unknown,
+            }
+
+            let action = {
+                let mut state = self
+                    .state
+                    .lock()
+                    .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
+                state.calls.push((method.to_owned(), args.clone()));
+                if state.capture_pending {
+                    state.capture_canceled = true;
+                    StopAction::Pending
+                } else if args
+                    .as_array()
+                    .and_then(|values| values.first())
+                    .and_then(Value::as_str)
+                    == Some(CAPTURE_ID)
+                    && state.capture_open
+                {
+                    state.capture_open = false;
+                    StopAction::Stopped
+                } else {
+                    StopAction::Unknown
+                }
+            };
+            return match action {
+                StopAction::Pending => {
+                    if let Some(gate) = &self.capture_start_gate {
+                        gate.stop_entered.notify_one();
+                        gate.completed.notified().await;
+                    }
+                    Ok(json!({"Ok": null}))
+                }
+                StopAction::Stopped => Ok(json!({"Ok": null})),
+                StopAction::Unknown => Ok(json!({"Err": {"code": "unknown_handle"}})),
+            };
+        }
+
         if method == tinyvoice_bus::names::methods::CAPTURE_START {
             if let Some(gate) = self.capture_start_gate.clone() {
                 let request = args
