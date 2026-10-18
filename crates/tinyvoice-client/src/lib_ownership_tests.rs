@@ -138,10 +138,9 @@ impl Interface for OwnershipVoice {
                     .ok_or_else(|| tinybus::Error::failed("missing capture reservation"))?
                     .to_owned();
                 {
-                    let mut state = self
-                        .state
-                        .lock()
-                        .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
+                    let mut state = self.state.lock().map_err(|_| {
+                        tinybus::Error::failed("ownership fixture state is poisoned")
+                    })?;
                     state.calls.push((method.to_owned(), args));
                     if !state.capture_reserved || handle != CAPTURE_ID {
                         return Err(tinybus::Error::failed("unknown capture reservation"));
