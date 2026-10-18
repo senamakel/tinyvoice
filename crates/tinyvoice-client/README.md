@@ -5,13 +5,22 @@ It depends on `tinyvoice-bus` for the wire contract and TinyBus SDK for module
 calls. It does not depend on the host-agnostic `tinyvoice` implementation or
 the loadable `tinyvoice-module` crate.
 
+This crate is consumed from source: use a path dependency in a workspace that
+includes TinyVoice, or use a TinyVoice Git checkout when composing another
+source workspace. It is not published to crates.io (`publish = false`).
+Registry packaging would remove the TinyBus Git revision and could give this
+client a different Rust `ModuleClient` type from a linked host.
+
 Construct it with `TinyVoiceClient::new(module_client)` using the host's one
 configured `ModuleClient`. Stateless calls continue through that configured
 client and preserve each contract member's positional tuple and typed reply.
-Stateful owners call TinyBus 0.3.2's ordinary `ModuleClient::bind` once at
+Stateful owners call TinyBus 0.3.3's ordinary `ModuleClient::bind` once at
 creation and retain the resulting private peer-pinned client for later calls.
 This is ordinary bus routing: it pins the current unique peer through alias
 handover, but does not load an artifact proof or make an attestation claim.
+The published SDK also delivers a streamed call's terminal verdict before
+reader EOF, so successful completion and remote failure remain distinguishable
+when a host consumes a stream.
 
 `VadSession`, `RecorderSession`, `OwnedCaptureStream`, and
 `OwnedHotkeySession` are explicit async leases. Their opaque resource handles
@@ -45,5 +54,9 @@ actual service invocations and verify wire arguments, returned types, peer
 handover, and owner-close behavior; they do not load a published artifact,
 access a microphone, or contact a backend.
 
-The client and module manifests target the published TinyBus 0.3.2 line, and
-the vendored gitlink and both Cargo lockfiles resolve to that source.
+The client and module manifests use TinyBus's canonical Git source, pinned to
+the signed `v0.3.3` source commit with a `>=0.3.3, <0.4.0` compatibility range.
+The standalone workspace and excluded module workspace patch that source to
+their shared vendored gitlink. Linked hosts can patch the same Git source to
+their one SDK checkout, so the typed client and module use identical Rust SDK
+types.

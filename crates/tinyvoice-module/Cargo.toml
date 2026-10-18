@@ -39,10 +39,10 @@ tinyvoice-bus = { version = "0.1.4", path = "../tinyvoice-bus" }
 # The pure voice library stays independently usable and bus-agnostic; this
 # crate exists so the vendored TinyBus dependency never reaches it.
 tinyvoice = { version = "0.3.2", path = "../tinyvoice", features = ["capture", "hotkey"] }
-# TinyBus provides the typed service interface and dynamic module host ABI.
-tinybus = { version = ">=0.3.2, <0.4", default-features = false, features = ["macros", "modules"] }
+# Keep the canonical Git source patchable by linked hosts sharing their SDK.
+tinybus = { git = "https://github.com/tinyhumansai/tinybus", rev = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e", version = ">=0.3.3, <0.4.0", default-features = false, features = ["macros", "modules"] }
 # The module-side SDK owns its runtime and exports the stable C entrypoints.
-tinybus-module = ">=0.3.2, <0.4"
+tinybus-module = { git = "https://github.com/tinyhumansai/tinybus", rev = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e", version = ">=0.3.3, <0.4.0" }
 # The module's methods are `async fn` on a served object, so it needs a runtime
 # even though every operation underneath is synchronous.
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
@@ -93,6 +93,8 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "test-
 tinyagents-live = { path = "../../vendor/tinyagents/crates/tinyagents-live" }
 tinyagents-harness = { path = "../../vendor/tinyagents/crates/tinyagents-harness" }
 tinytools = { path = "../../vendor/tinyagents/vendor/tinytools/crates/tinytools" }
+
+[patch."https://github.com/tinyhumansai/tinybus"]
 tinybus = { path = "../../vendor/tinybus/crates/tinybus" }
 tinybus-module = { path = "../../vendor/tinybus/crates/tinybus-module" }
 tinybus-macros = { path = "../../vendor/tinybus/crates/tinybus-macros" }
