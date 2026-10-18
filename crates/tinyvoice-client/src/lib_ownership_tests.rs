@@ -483,10 +483,6 @@ async fn handoff_fixture_with_capture_start_gate(
     })
 }
 
-fn make_client(proxy: Proxy) -> TinyVoiceClient {
-    make_client_with_timeout(proxy, None)
-}
-
 fn make_client_with_timeout(proxy: Proxy, timeout: Option<Duration>) -> TinyVoiceClient {
     let failures = Arc::new(IgnoreFailures);
     let mut module = ModuleClient::new(FixtureAccess {
@@ -855,6 +851,71 @@ async fn owned_capture_stream_stays_with_its_creator_across_alias_handover() {
         ]
         .map(str::to_owned),
         "B receives its own usable calls and no call from A's projection"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn timed_out_owned_capture_start_can_publish_after_its_caller_loses_the_handle() {
+    let gate = Arc::new(CaptureStartGate::default());
+    let fixture = handoff_fixture_with_capture_start_gate(
+        Some(gate.clone()),
+        Some(Duration::from_secs(1)),
+    )
+    .await
+    .expect("start gated capture service");
+    let client = fixture.client.clone();
+    let (result_tx, result_rx) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        let result = client
+            .start_capture_owned(MicrophonePermission::Granted)
+            .await;
+        let _ = result_tx.send(result);
+    });
+
+    // The reservation call has completed and CAPTURE_START has reached the
+    // remote service, which is deliberately held before native publication.
+    gate.entered.notified().await;
+    tokio::time::advance(Duration::from_secs(1)).await;
+    let timed_out = result_rx
+        .await
+        .expect("the client task reports its deadline result");
+    assert!(timed_out.is_err(), "the start RPC must hit its configured deadline");
+
+    // A timeout only stops the caller's wait. The in-flight service operation
+    // can still publish the stream after the caller lost the private handle.
+    let completed = gate.completed.notified();
+    gate.release.notify_one();
+    completed.await;
+    let late_poll = fixture
+        .client
+        .poll_capture(CapturePollRequest {
+            handle: CaptureHandle(CAPTURE_ID.to_owned()),
+            max_chunks: 1,
+        })
+        .await;
+    let cleanup = fixture
+        .client
+        .stop_capture(CaptureHandle(CAPTURE_ID.to_owned()))
+        .await;
+
+    assert_eq!(
+        late_poll,
+        Ok(Ok(CaptureBatch {
+            chunks: vec![RawChunk { samples: vec![0.25] }],
+            closed: false,
+        })),
+        "the service published a live stream after start_capture_owned returned an error"
+    );
+    assert_eq!(cleanup, Ok(Ok(())), "the fixture cleans up the late stream");
+    assert_eq!(
+        methods(&fixture.state_a),
+        [
+            tinyvoice_bus::names::methods::RESERVE_CAPTURE,
+            tinyvoice_bus::names::methods::CAPTURE_START,
+            tinyvoice_bus::names::methods::CAPTURE_POLL,
+            tinyvoice_bus::names::methods::CAPTURE_STOP,
+        ]
+        .map(str::to_owned)
     );
 }
 
