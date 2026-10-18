@@ -386,14 +386,6 @@ fn ensure_vad_open(state: &PeerState, id: u64) -> tinybus::Result<()> {
     }
 }
 
-fn ensure_capture_open(state: &PeerState, handle: Option<&str>) -> tinybus::Result<()> {
-    if handle == Some(CAPTURE_ID) && state.capture_open {
-        Ok(())
-    } else {
-        Err(tinybus::Error::failed("unknown capture stream"))
-    }
-}
-
 fn ensure_hotkey_open(
     state: &PeerState,
     request: Option<&serde_json::Map<String, Value>>,
@@ -532,6 +524,22 @@ fn make_client_with_timeout(proxy: Proxy, timeout: Option<Duration>) -> TinyVoic
         module = module.with_timeout(timeout);
     }
     TinyVoiceClient::new(module)
+}
+
+async fn reserve_and_start_owned_capture(
+    client: &TinyVoiceClient,
+) -> (OwnedCaptureReservation, OwnedCaptureStream) {
+    let reservation = client
+        .reserve_capture_owned(MicrophonePermission::Granted)
+        .await
+        .expect("reserve owned capture")
+        .expect("capture reservation succeeds");
+    let stream = reservation
+        .start()
+        .await
+        .expect("start owned capture")
+        .expect("capture stream starts");
+    (reservation, stream)
 }
 
 impl AliasHandoffFixture {
@@ -792,12 +800,7 @@ async fn owned_capture_stream_stays_with_its_creator_across_alias_handover() {
     let fixture = handoff_fixture()
         .await
         .expect("start both service peers on one broker");
-    let a = fixture
-        .client
-        .start_capture_owned(MicrophonePermission::Granted)
-        .await
-        .expect("start capture on A")
-        .expect("A capture start succeeds");
+    let (_a_reservation, a) = reserve_and_start_owned_capture(&fixture.client).await;
     assert_eq!(
         a.format(),
         CaptureFormat {
@@ -827,12 +830,7 @@ async fn owned_capture_stream_stays_with_its_creator_across_alias_handover() {
         VoiceIntent::Resume
     );
 
-    let b = fixture
-        .client
-        .start_capture_owned(MicrophonePermission::Granted)
-        .await
-        .expect("start colliding capture on B")
-        .expect("B capture start succeeds");
+    let (_b_reservation, b) = reserve_and_start_owned_capture(&fixture.client).await;
     assert_eq!(a.handle, b.handle, "capture handles collide across peers");
     let b_batch = b.poll(1).await;
     assert!(
@@ -1190,12 +1188,7 @@ async fn owned_resources_fail_closed_after_their_peer_detaches() {
     let a_recorder = RecorderSession::open(&fixture.client)
         .await
         .expect("open A recorder");
-    let a_capture = fixture
-        .client
-        .start_capture_owned(MicrophonePermission::Granted)
-        .await
-        .expect("start A capture")
-        .expect("A capture starts");
+    let (_a_reservation, a_capture) = reserve_and_start_owned_capture(&fixture.client).await;
     let a_hotkey = fixture
         .client
         .reserve_hotkey_owned(HotkeyRequest {
@@ -1227,12 +1220,7 @@ async fn owned_resources_fail_closed_after_their_peer_detaches() {
     let b_recorder = RecorderSession::open(&fixture.client)
         .await
         .expect("open colliding B recorder");
-    let b_capture = fixture
-        .client
-        .start_capture_owned(MicrophonePermission::Granted)
-        .await
-        .expect("start colliding B capture")
-        .expect("B capture starts");
+    let (_b_reservation, b_capture) = reserve_and_start_owned_capture(&fixture.client).await;
     let b_hotkey = fixture
         .client
         .reserve_hotkey_owned(HotkeyRequest {
