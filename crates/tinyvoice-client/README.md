@@ -22,13 +22,16 @@ resource owner. OpenHuman keeps host policy such as volume clamping, microphone
 permission, hotkey policy, and conversion from persisted configuration into
 `VadConfig` in its own adapter.
 
-`start_capture_owned` binds before reserving and starting the native stream,
-then returns an `OwnedCaptureStream` for polling and explicit close. A timeout
-or cancellation during `CAPTURE_START` occurs before that owner is returned;
-callers that need the reservation handle before native startup can keep using
-the flat `reserve_capture`, `start_capture`, and `stop_capture` methods. Those
-legacy methods preserve the caller's explicit handle, but use whichever peer
-the supplied ordinary client addresses at each call.
+`reserve_capture_owned` returns a pinned reservation before `CAPTURE_START`.
+Keep that owner while calling `start`; after a timeout or cancellation, its
+explicit `close` targets the creating peer and uses the module's existing
+pending-start cancellation path. A successful start returns an
+`OwnedCaptureStream` for polling and explicit stop. A reservation that never
+starts still follows the module's existing expiry behavior because the bus
+contract has no separate reservation-release method. The flat
+`reserve_capture`, `start_capture`, `poll_capture`, and `stop_capture` methods
+remain available for compatibility; they use whichever peer the supplied
+ordinary client addresses at each call.
 
 The client keeps the configured `ModuleClient` deadline and reporting sink.
 It does not add a second timeout. `VoiceCallError::kind()` exposes the closed

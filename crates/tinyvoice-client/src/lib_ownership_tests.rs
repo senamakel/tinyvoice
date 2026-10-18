@@ -949,8 +949,8 @@ async fn timed_out_capture_start_does_not_leave_an_unowned_stream() {
         [
             tinyvoice_bus::names::methods::RESERVE_CAPTURE,
             tinyvoice_bus::names::methods::CAPTURE_START,
-            tinyvoice_bus::names::methods::CAPTURE_POLL,
             tinyvoice_bus::names::methods::CAPTURE_STOP,
+            tinyvoice_bus::names::methods::CAPTURE_POLL,
         ]
         .map(str::to_owned)
     );
