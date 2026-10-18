@@ -6,6 +6,7 @@ rust-version = "1.88"
 license = "GPL-3.0-only"
 description = "Typed TinyBus host client for the TinyVoice module."
 repository = "https://github.com/tinyhumansai/tinyvoice"
+publish = false
 
 [dependencies]
 # The contract carries audio samples as base64 text.

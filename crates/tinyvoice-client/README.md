@@ -5,6 +5,12 @@ It depends on `tinyvoice-bus` for the wire contract and TinyBus SDK for module
 calls. It does not depend on the host-agnostic `tinyvoice` implementation or
 the loadable `tinyvoice-module` crate.
 
+This crate is consumed from source: use a path dependency in a workspace that
+includes TinyVoice, or use a TinyVoice Git checkout when composing another
+source workspace. It is not published to crates.io (`publish = false`).
+Registry packaging would remove the TinyBus Git revision and could give this
+client a different Rust `ModuleClient` type from a linked host.
+
 Construct it with `TinyVoiceClient::new(module_client)` using the host's one
 configured `ModuleClient`. Stateless calls continue through that configured
 client and preserve each contract member's positional tuple and typed reply.
