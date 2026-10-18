@@ -27,8 +27,9 @@ Keep that owner while calling `start`; after a timeout or cancellation, its
 explicit `close` targets the creating peer and uses the module's existing
 pending-start cancellation path. A successful start returns an
 `OwnedCaptureStream` for polling and explicit stop. A reservation that never
-starts still follows the module's existing expiry behavior because the bus
-contract has no separate reservation-release method. The flat
+starts can be released explicitly with the same owner's `close`. If the
+reservation reply is lost before the caller learns its handle, the module's
+existing expiry still bounds that unknown reservation. The flat
 `reserve_capture`, `start_capture`, `poll_capture`, and `stop_capture` methods
 remain available for compatibility; they use whichever peer the supplied
 ordinary client addresses at each call.

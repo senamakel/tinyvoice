@@ -294,7 +294,7 @@ impl OwnershipVoice {
                 args.clone(),
             ));
             if !matches!(&state.capture, CaptureFixtureState::Reserved) || handle != CAPTURE_ID {
-                return Err(tinybus::Error::failed("unknown capture reservation"));
+                return Ok(json!({"Err": {"code": "unknown_handle"}}));
             }
             state.capture = if gate.is_some() {
                 CaptureFixtureState::Starting { canceled: false }
@@ -360,6 +360,9 @@ impl OwnershipVoice {
                 }
                 true
             } else if matches!(&state.capture, CaptureFixtureState::Live) {
+                state.capture = CaptureFixtureState::Empty;
+                false
+            } else if matches!(&state.capture, CaptureFixtureState::Reserved) {
                 state.capture = CaptureFixtureState::Empty;
                 false
             } else {
@@ -995,6 +998,45 @@ async fn owned_capture_stream_stays_with_its_creator_across_alias_handover() {
         ]
         .map(str::to_owned),
         "B receives its own usable calls and no call from A's projection"
+    );
+}
+
+#[tokio::test]
+async fn closing_an_unstarted_capture_reservation_releases_its_handle() {
+    let fixture = handoff_fixture()
+        .await
+        .expect("start both service peers on one broker");
+    let reservation = fixture
+        .client
+        .reserve_capture_owned(MicrophonePermission::Granted)
+        .await
+        .expect("reserve capture on A")
+        .expect("A reservation succeeds");
+
+    assert_eq!(reservation.close().await, Ok(Ok(())));
+    assert!(matches!(
+        reservation.start().await,
+        Ok(Err(CaptureError::UnknownHandle))
+    ));
+    assert!(matches!(
+        fixture
+            .client
+            .poll_capture(CapturePollRequest {
+                handle: reservation.handle.clone(),
+                max_chunks: 1,
+            })
+            .await,
+        Ok(Err(CaptureError::UnknownHandle))
+    ));
+    assert_eq!(
+        methods(&fixture.state_a),
+        [
+            tinyvoice_bus::names::methods::RESERVE_CAPTURE,
+            tinyvoice_bus::names::methods::CAPTURE_STOP,
+            tinyvoice_bus::names::methods::CAPTURE_START,
+            tinyvoice_bus::names::methods::CAPTURE_POLL,
+        ]
+        .map(str::to_owned)
     );
 }
 

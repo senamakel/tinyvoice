@@ -752,10 +752,11 @@ impl OwnedCaptureReservation {
         }
     }
 
-    /// Cancel pending startup or stop a published stream on its pinned peer.
+    /// Release this known reservation, cancel pending startup, or stop its stream.
     ///
-    /// If startup has not begun, the module may report [`CaptureError::UnknownHandle`];
-    /// reservations expire in the module according to its existing contract.
+    /// The module releases a known reservation even if `start` has not begun.
+    /// If the reservation reply itself is lost before the caller learns the
+    /// handle, the module's existing expiry bounds that unknown reservation.
     ///
     /// # Errors
     ///
