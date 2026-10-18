@@ -1213,7 +1213,11 @@ async fn owned_resources_fail_closed_after_their_peer_detaches() {
         .advance(SessionInput::Run)
         .await
         .expect("B recorder responds");
-    b_hotkey.start().await.expect("B hotkey starts");
+    b_hotkey
+        .start()
+        .await
+        .expect("B hotkey start RPC succeeds")
+        .expect("B hotkey starts");
     b_hotkey
         .feed(
             1,
@@ -1224,6 +1228,7 @@ async fn owned_resources_fail_closed_after_their_peer_detaches() {
             false,
         )
         .await
+        .expect("B hotkey feed RPC succeeds")
         .expect("B accepts host-owned input");
     assert_eq!(
         b_vad.push(20, &[0.8]).await.expect("B VAD is usable").len(),
