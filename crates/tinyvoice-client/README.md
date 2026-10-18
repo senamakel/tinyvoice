@@ -46,5 +46,4 @@ handover, and owner-close behavior; they do not load a published artifact,
 access a microphone, or contact a backend.
 
 The client and module manifests target the published TinyBus 0.3.2 line, and
-the vendored gitlink pins that source. The original Cargo lockfiles still need
-refreshing under the authorized Cargo validation slot.
+the vendored gitlink and both Cargo lockfiles resolve to that source.
