@@ -349,25 +349,6 @@ impl Interface for OwnershipVoice {
                     })
                 }
             }
-            tinyvoice_bus::names::methods::CAPTURE_STOP => {
-                let gate = self.capture_start_gate.clone();
-                if state.capture_pending {
-                    state.capture_canceled = true;
-                    drop(state);
-                    if let Some(gate) = gate {
-                        gate.stop_entered.notify_one();
-                        gate.completed.notified().await;
-                    }
-                    return Ok(json!({"Ok": null}));
-                }
-                if values.first().and_then(Value::as_str) == Some(CAPTURE_ID) && state.capture_open
-                {
-                    state.capture_open = false;
-                    json!({"Ok": null})
-                } else {
-                    json!({"Err": {"code": "unknown_handle"}})
-                }
-            }
             tinyvoice_bus::names::methods::HOTKEY_RESERVE => {
                 state.hotkey_open = true;
                 json!({"Ok": HOTKEY_ID})
