@@ -7,7 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TINYBUS_033 = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e"
-MODULE_RELEASE_WORKFLOW = "6ed83b04aab2d8977ec62e966cb914531e534fa4"
+ORDINARY_MODULE_RELEASE_WORKFLOW = "1e28317c435a9c714002199e65d18a1067fa5777"
+REVIEWED_EPIC_MODULE_RELEASE_WORKFLOW = "6ed83b04aab2d8977ec62e966cb914531e534fa4"
 
 
 class SdkVersionTests(unittest.TestCase):
@@ -42,10 +43,13 @@ class SdkVersionTests(unittest.TestCase):
         self.assertIsNotNone(pinned_commit, "parent tree must contain the TinyBus gitlink")
         self.assertEqual(pinned_commit[1], TINYBUS_033)
 
-    def test_release_callers_use_reviewed_canonical_workflow_commit(self):
+    def test_release_callers_preserve_ordinary_and_reviewed_workflow_pins(self):
         release = (ROOT / ".github/workflows/release.yml").read_text()
         callers = re.findall(r"uses: tinyhumansai/\.github/.github/workflows/[^\s]+@(\w+)", release)
-        self.assertEqual(callers, [MODULE_RELEASE_WORKFLOW, MODULE_RELEASE_WORKFLOW])
+        self.assertEqual(
+            callers,
+            [ORDINARY_MODULE_RELEASE_WORKFLOW, REVIEWED_EPIC_MODULE_RELEASE_WORKFLOW],
+        )
 
 
 if __name__ == "__main__":
