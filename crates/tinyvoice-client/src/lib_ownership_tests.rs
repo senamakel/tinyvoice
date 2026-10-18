@@ -151,17 +151,19 @@ impl Interface for OwnershipVoice {
                     .lock()
                     .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
                 state.calls.push((method.to_owned(), args.clone()));
-                if state.capture_pending {
-                    state.capture_canceled = true;
+                if matches!(&state.capture, CaptureFixtureState::Starting { .. }) {
+                    if let CaptureFixtureState::Starting { canceled } = &mut state.capture {
+                        *canceled = true;
+                    }
                     StopAction::Pending
                 } else if args
                     .as_array()
                     .and_then(|values| values.first())
                     .and_then(Value::as_str)
                     == Some(CAPTURE_ID)
-                    && state.capture_open
+                    && matches!(&state.capture, CaptureFixtureState::Live)
                 {
-                    state.capture_open = false;
+                    state.capture = CaptureFixtureState::Empty;
                     StopAction::Stopped
                 } else {
                     StopAction::Unknown
@@ -197,10 +199,12 @@ impl Interface for OwnershipVoice {
                         tinybus::Error::failed("ownership fixture state is poisoned")
                     })?;
                     state.calls.push((method.to_owned(), args));
-                    if !state.capture_reserved || handle != CAPTURE_ID {
+                    if !matches!(&state.capture, CaptureFixtureState::Reserved)
+                        || handle != CAPTURE_ID
+                    {
                         return Err(tinybus::Error::failed("unknown capture reservation"));
                     }
-                    state.capture_pending = true;
+                    state.capture = CaptureFixtureState::Starting { canceled: false };
                 }
                 gate.entered.notify_one();
                 gate.release.notified().await;
@@ -208,16 +212,22 @@ impl Interface for OwnershipVoice {
                     .state
                     .lock()
                     .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
-                if state.capture_canceled {
-                    state.capture_pending = false;
-                    state.capture_canceled = false;
-                    state.capture_reserved = false;
+                if matches!(
+                    &state.capture,
+                    CaptureFixtureState::Starting { canceled: true }
+                ) {
+                    state.capture = CaptureFixtureState::Empty;
                     gate.completed.notify_one();
                     return Ok(json!({"Err": {"code": "cancelled"}}));
                 }
-                state.capture_pending = false;
-                state.capture_reserved = false;
-                state.capture_open = true;
+                if !matches!(
+                    &state.capture,
+                    CaptureFixtureState::Starting { canceled: false }
+                ) && !matches!(&state.capture, CaptureFixtureState::Reserved)
+                {
+                    return Err(tinybus::Error::failed("capture startup lost its reservation"));
+                }
+                state.capture = CaptureFixtureState::Live;
                 gate.completed.notify_one();
                 return Ok(json!({
                     "Ok": {
@@ -318,7 +328,7 @@ impl Interface for OwnershipVoice {
                 Value::Null
             }
             tinyvoice_bus::names::methods::RESERVE_CAPTURE => {
-                state.capture_reserved = true;
+                state.capture = CaptureFixtureState::Reserved;
                 json!({"Ok": CAPTURE_ID})
             }
             tinyvoice_bus::names::methods::CAPTURE_START => {
@@ -330,12 +340,12 @@ impl Interface for OwnershipVoice {
                     .get("handle")
                     .and_then(Value::as_str)
                     .ok_or_else(|| tinybus::Error::failed("missing capture reservation"))?;
-                if !state.capture_reserved || handle != CAPTURE_ID {
+                if !matches!(&state.capture, CaptureFixtureState::Reserved)
+                    || handle != CAPTURE_ID
+                {
                     return Err(tinybus::Error::failed("unknown capture reservation"));
                 }
-                state.capture_pending = false;
-                state.capture_reserved = false;
-                state.capture_open = true;
+                state.capture = CaptureFixtureState::Live;
                 json!({
                     "Ok": {
                         "handle": CAPTURE_ID,
@@ -349,7 +359,7 @@ impl Interface for OwnershipVoice {
                     .and_then(Value::as_object)
                     .ok_or_else(|| tinybus::Error::failed("missing capture poll request"))?;
                 if request.get("handle").and_then(Value::as_str) != Some(CAPTURE_ID)
-                    || !state.capture_open
+                    || !matches!(&state.capture, CaptureFixtureState::Live)
                 {
                     json!({"Err": {"code": "unknown_handle"}})
                 } else {
@@ -363,11 +373,12 @@ impl Interface for OwnershipVoice {
                 }
             }
             tinyvoice_bus::names::methods::HOTKEY_RESERVE => {
-                state.hotkey_open = true;
+                state.hotkey = HotkeyFixtureState::Reserved;
                 json!({"Ok": HOTKEY_ID})
             }
             tinyvoice_bus::names::methods::HOTKEY_START => {
                 ensure_hotkey_open(&state, values.first().and_then(Value::as_object))?;
+                state.hotkey = HotkeyFixtureState::Running { active: false };
                 json!({
                     "Ok": {
                         "state": "running",
@@ -379,7 +390,7 @@ impl Interface for OwnershipVoice {
             }
             tinyvoice_bus::names::methods::HOTKEY_FEED => {
                 ensure_hotkey_open(&state, values.first().and_then(Value::as_object))?;
-                state.hotkey_active = true;
+                state.hotkey = HotkeyFixtureState::Running { active: true };
                 json!({
                     "Ok": {
                         "state": "running",
@@ -396,7 +407,10 @@ impl Interface for OwnershipVoice {
                 } else {
                     "released"
                 };
-                let active = self.peer == Peer::B && state.hotkey_active;
+                let active = matches!(
+                    &state.hotkey,
+                    HotkeyFixtureState::Running { active: true }
+                );
                 json!({
                     "Ok": {
                         "generation": 1,
@@ -409,7 +423,7 @@ impl Interface for OwnershipVoice {
             }
             tinyvoice_bus::names::methods::HOTKEY_STOP => {
                 ensure_hotkey_open(&state, values.first().and_then(Value::as_object))?;
-                state.hotkey_open = false;
+                state.hotkey = HotkeyFixtureState::Empty;
                 json!({
                     "Ok": {
                         "state": "stopped",
@@ -453,7 +467,7 @@ fn ensure_hotkey_open(
         .and_then(|request| request.get("handle"))
         .and_then(Value::as_str)
         == Some(HOTKEY_ID)
-        && state.hotkey_open
+        && !matches!(&state.hotkey, HotkeyFixtureState::Empty)
     {
         Ok(())
     } else {
