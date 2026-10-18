@@ -74,6 +74,16 @@ class SdkVersionTests(unittest.TestCase):
                 source = (ROOT / relative).read_text()
                 self.assertIn('version: "0.3.3",', source)
 
+    def test_client_is_source_consumed_and_not_registry_published(self):
+        client = self.manifest("crates/tinyvoice-client/Cargo.toml")
+        self.assertIs(client["package"].get("publish"), False)
+
+        readme = (ROOT / "crates/tinyvoice-client/README.md").read_text()
+        self.assertIn("not published to crates.io", readme)
+        self.assertIn("path dependency", readme)
+        self.assertIn("Git checkout", readme)
+        self.assertIn("registry package", readme)
+
     def test_parent_tree_gitlink_names_exact_published_source_without_vendor_manifest(self):
         tree = subprocess.run(
             ["git", "ls-tree", "HEAD", "--", "vendor/tinybus"],
