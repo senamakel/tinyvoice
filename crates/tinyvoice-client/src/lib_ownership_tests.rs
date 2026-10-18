@@ -136,7 +136,7 @@ impl OwnershipVoice {
             .state
             .lock()
             .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
-        state.calls.push((method.to_owned(), args));
+        state.calls.push((method.to_owned(), args.clone()));
         match method {
             tinyvoice_bus::names::methods::ROUTE => Ok(match self.peer {
                 Peer::A => json!(r#"{"intent":"pause"}"#),
@@ -185,7 +185,7 @@ impl OwnershipVoice {
             .state
             .lock()
             .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
-        state.calls.push((method.to_owned(), args));
+        state.calls.push((method.to_owned(), args.clone()));
         match method {
             tinyvoice_bus::names::methods::SESSION_OPEN => {
                 state.recorders.insert(
@@ -244,7 +244,7 @@ impl OwnershipVoice {
             .state
             .lock()
             .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
-        state.calls.push((method.to_owned(), args));
+        state.calls.push((method.to_owned(), args.clone()));
         match method {
             tinyvoice_bus::names::methods::RESERVE_CAPTURE => {
                 state.capture = CaptureFixtureState::Reserved;
@@ -291,7 +291,7 @@ impl OwnershipVoice {
                 .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
             state.calls.push((
                 tinyvoice_bus::names::methods::CAPTURE_START.to_owned(),
-                args,
+                args.clone(),
             ));
             if !matches!(&state.capture, CaptureFixtureState::Reserved) || handle != CAPTURE_ID {
                 return Err(tinybus::Error::failed("unknown capture reservation"));
@@ -347,9 +347,10 @@ impl OwnershipVoice {
                 .state
                 .lock()
                 .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
-            state
-                .calls
-                .push((tinyvoice_bus::names::methods::CAPTURE_STOP.to_owned(), args));
+            state.calls.push((
+                tinyvoice_bus::names::methods::CAPTURE_STOP.to_owned(),
+                args.clone(),
+            ));
             if handle != Some(CAPTURE_ID) {
                 return Ok(json!({"Err": {"code": "unknown_handle"}}));
             }
@@ -382,7 +383,7 @@ impl OwnershipVoice {
             .state
             .lock()
             .map_err(|_| tinybus::Error::failed("ownership fixture state is poisoned"))?;
-        state.calls.push((method.to_owned(), args));
+        state.calls.push((method.to_owned(), args.clone()));
         match method {
             tinyvoice_bus::names::methods::HOTKEY_RESERVE => {
                 state.hotkey = HotkeyFixtureState::Reserved;
