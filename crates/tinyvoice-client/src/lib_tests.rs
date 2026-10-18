@@ -338,7 +338,10 @@ async fn vad_and_recorder_handles_route_each_operation_and_close_only_explicitly
     let vad_config = tinyvoice_bus::VadConfig::default();
     let vad = VadSession::open(&client, vad_config).await?;
     assert!(!format!("{vad:?}").contains("41"));
-    assert!(context("VAD push", vad.push(20, &[0.2, 0.0]).await)?.is_empty());
+    assert_eq!(
+        context("VAD push", vad.push(20, &[0.2, 0.0]).await)?,
+        Vec::<tinyvoice_bus::IndexedVadEvent>::new()
+    );
     assert!(context("VAD speaking", vad.is_speaking().await)?);
     context("VAD reset", vad.reset().await)?;
     let vad_id = vad.id;
@@ -466,13 +469,13 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
         handle: stream.handle.clone(),
         max_chunks: 2,
     };
-    assert!(
+    assert_eq!(
         client
             .poll_capture(poll.clone())
             .await?
             .expect("poll")
-            .chunks
-            .is_empty()
+            .chunks,
+        Vec::<tinyvoice_bus::capture::RawChunk>::new()
     );
     client
         .stop_capture(stream.handle.clone())
@@ -497,13 +500,13 @@ async fn capture_and_hotkey_wrappers_preserve_typed_requests_and_business_errors
         handle: handle.clone(),
         acknowledged_batch: None,
     };
-    assert!(
+    assert_eq!(
         client
             .read_hotkey(read.clone())
             .await?
             .expect("hotkey read")
-            .events
-            .is_empty()
+            .events,
+        Vec::<tinyvoice_bus::SequencedHotkeyEvent>::new()
     );
     let feed = tinyvoice_bus::HotkeyFeedRequest {
         handle: handle.clone(),

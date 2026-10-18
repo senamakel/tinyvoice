@@ -198,6 +198,12 @@ fn to_json<T: serde::Serialize>(value: &T) -> TinyBusResult<String> {
     clippy::unused_async,
     reason = "TinyBus interface methods require async signatures"
 )]
+// This lint was added after the crate's Rust 1.88 MSRV.
+#[allow(unknown_lints)]
+#[expect(
+    clippy::unused_async_trait_impl,
+    reason = "TinyBus interface methods must retain async signatures at this dynamic module boundary"
+)]
 #[tinybus::interface(name = "ai.tinyhumans.tinyvoice.Voice")]
 impl VoiceService {
     /// Fix explicit host scheduling bounds for this module instance.
