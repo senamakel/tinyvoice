@@ -6,6 +6,7 @@ use super::*;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serde_json::{Value, json};
@@ -93,9 +94,17 @@ struct PeerState {
 
 type SharedPeerState = Arc<Mutex<PeerState>>;
 
+#[derive(Default)]
+struct CaptureStartGate {
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+    completed: tokio::sync::Notify,
+}
+
 struct OwnershipVoice {
     peer: Peer,
     state: SharedPeerState,
+    capture_start_gate: Option<Arc<CaptureStartGate>>,
 }
 
 #[async_trait]
@@ -113,6 +122,12 @@ impl Interface for OwnershipVoice {
 
     async fn call(&self, member: &MemberName, args: Value) -> tinybus::Result<Value> {
         let method = member.as_str();
+        if method == tinyvoice_bus::names::methods::CAPTURE_START {
+            if let Some(gate) = &self.capture_start_gate {
+                gate.entered.notify_one();
+                gate.release.notified().await;
+            }
+        }
         let mut state = self
             .state
             .lock()
@@ -220,6 +235,9 @@ impl Interface for OwnershipVoice {
                     return Err(tinybus::Error::failed("unknown capture reservation"));
                 }
                 state.capture_open = true;
+                if let Some(gate) = &self.capture_start_gate {
+                    gate.completed.notify_one();
+                }
                 json!({
                     "Ok": {
                         "handle": CAPTURE_ID,
@@ -399,6 +417,13 @@ struct AliasHandoffFixture {
 }
 
 async fn handoff_fixture() -> tinybus::Result<AliasHandoffFixture> {
+    handoff_fixture_with_capture_start_gate(None, None).await
+}
+
+async fn handoff_fixture_with_capture_start_gate(
+    capture_start_gate: Option<Arc<CaptureStartGate>>,
+    client_timeout: Option<Duration>,
+) -> tinybus::Result<AliasHandoffFixture> {
     let bus = MemoryBus::new();
     Broker::new().spawn(bus.clone());
 
@@ -414,6 +439,7 @@ async fn handoff_fixture() -> tinybus::Result<AliasHandoffFixture> {
             OwnershipVoice {
                 peer: Peer::A,
                 state: state_a.clone(),
+                capture_start_gate: capture_start_gate.clone(),
             },
         )
         .await?;
@@ -423,6 +449,7 @@ async fn handoff_fixture() -> tinybus::Result<AliasHandoffFixture> {
             OwnershipVoice {
                 peer: Peer::B,
                 state: state_b.clone(),
+                capture_start_gate: None,
             },
         )
         .await?;
@@ -443,8 +470,8 @@ async fn handoff_fixture() -> tinybus::Result<AliasHandoffFixture> {
         tinyvoice_bus::BUS_NAME,
     )?;
 
-    let client = make_client(alias_proxy);
-    let direct_a = make_client(direct_a_proxy);
+    let client = make_client_with_timeout(alias_proxy, client_timeout);
+    let direct_a = make_client_with_timeout(direct_a_proxy, client_timeout);
     Ok(AliasHandoffFixture {
         client,
         direct_a,
@@ -457,11 +484,18 @@ async fn handoff_fixture() -> tinybus::Result<AliasHandoffFixture> {
 }
 
 fn make_client(proxy: Proxy) -> TinyVoiceClient {
+    make_client_with_timeout(proxy, None)
+}
+
+fn make_client_with_timeout(proxy: Proxy, timeout: Option<Duration>) -> TinyVoiceClient {
     let failures = Arc::new(IgnoreFailures);
-    let module = ModuleClient::new(FixtureAccess {
+    let mut module = ModuleClient::new(FixtureAccess {
         reporter: FailureReporter::new(failures),
     })
     .with_fixture(proxy);
+    if let Some(timeout) = timeout {
+        module = module.with_timeout(timeout);
+    }
     TinyVoiceClient::new(module)
 }
 

@@ -23,7 +23,7 @@ tinybus = { version = ">=0.3.2, <0.4", path = "../../vendor/tinybus/crates/tinyb
 # Implements the async in-memory service used by the broker tests.
 async-trait = "0.1"
 # Provides the async test executor and `#[tokio::test]` macro.
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "test-util"] }
 
 [lints]
 workspace = true
