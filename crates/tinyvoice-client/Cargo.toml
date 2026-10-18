@@ -16,8 +16,8 @@ serde = "1"
 serde_json = "1"
 # Shared TinyVoice member names, request types, and typed replies.
 tinyvoice-bus = { version = "0.1.4", path = "../tinyvoice-bus" }
-# One host-configured module client owns calls, deadlines, and reporting.
-tinybus = { version = ">=0.2.2, <0.3", path = "../../vendor/tinybus/crates/tinybus", default-features = false }
+# TinyBus 0.3.2 adds ordinary peer-pinned clients for stateful voice leases.
+tinybus = { version = ">=0.3.2, <0.4", path = "../../vendor/tinybus/crates/tinybus", default-features = false }
 
 [dev-dependencies]
 # Implements the async in-memory service used by the broker tests.

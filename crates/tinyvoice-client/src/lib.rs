@@ -8,7 +8,7 @@
 use std::fmt;
 
 use serde::{Serialize, de::DeserializeOwned};
-use tinybus::module::{ModuleCallError, ModuleCallFailure, ModuleClient};
+use tinybus::module::{ModuleCallError, ModuleCallFailure, ModuleClient, PinnedModuleClient};
 
 pub use tinyvoice_bus as contract;
 pub use tinyvoice_bus::capture::{
@@ -111,6 +111,7 @@ impl std::error::Error for VoiceCallError {}
 #[derive(Clone)]
 pub struct TinyVoiceClient {
     module: ModuleClient,
+    pinned: Option<PinnedModuleClient>,
 }
 
 impl fmt::Debug for TinyVoiceClient {
@@ -130,7 +131,22 @@ impl TinyVoiceClient {
     /// and configured deadline.
     #[must_use]
     pub fn new(module: ModuleClient) -> Self {
-        Self { module }
+        Self {
+            module,
+            pinned: None,
+        }
+    }
+
+    async fn bind(&self) -> Result<Self> {
+        let pinned = self
+            .module
+            .bind(MODULE_ID)
+            .await
+            .map_err(VoiceCallError::from_failure)?;
+        Ok(Self {
+            module: self.module.clone(),
+            pinned: Some(pinned),
+        })
     }
 
     /// Classify a wake-word-stripped transcript into a fast-path intent.
@@ -314,12 +330,13 @@ impl TinyVoiceClient {
     ///
     /// Returns a sanitized `TinyBus` failure.
     pub async fn open_vad(&self, config: VadConfig) -> Result<VadSession> {
+        let client = self.bind().await?;
         let config = encode_json(&config, "VAD config")?;
-        let id = self
+        let id = client
             .call(tinyvoice_bus::names::methods::VAD_OPEN, (config,))
             .await?;
         Ok(VadSession {
-            client: self.clone(),
+            client,
             id,
         })
     }
@@ -496,10 +513,12 @@ impl TinyVoiceClient {
         A: Serialize + Send,
         R: DeserializeOwned,
     {
-        self.module
-            .call_detailed(MODULE_ID, method, args)
-            .await
-            .map_err(VoiceCallError::from_failure)
+        let result = if let Some(pinned) = &self.pinned {
+            pinned.call_detailed(method, args).await
+        } else {
+            self.module.call_detailed(MODULE_ID, method, args).await
+        };
+        result.map_err(VoiceCallError::from_failure)
     }
 
     async fn call_json<A, R>(&self, method: &str, args: A, field: &str) -> Result<R>
