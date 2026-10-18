@@ -294,8 +294,7 @@ impl Interface for OwnershipVoice {
                     }
                     return Ok(json!({"Ok": null}));
                 }
-                if values.first().and_then(Value::as_str) == Some(CAPTURE_ID)
-                    && state.capture_open
+                if values.first().and_then(Value::as_str) == Some(CAPTURE_ID) && state.capture_open
                 {
                     state.capture_open = false;
                     json!({"Ok": null})
@@ -969,9 +968,7 @@ async fn canceled_capture_start_does_not_leave_an_unowned_stream() {
         .expect("reserve owned capture before startup")
         .expect("reservation succeeds");
     let start_owner = owner.clone();
-    let start_task = tokio::spawn(async move {
-        start_owner.start().await
-    });
+    let start_task = tokio::spawn(async move { start_owner.start().await });
 
     tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
         .await
