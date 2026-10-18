@@ -1,8 +1,8 @@
 //! Alias-handover regression tests for owned TinyVoice session projections.
 
-use super::*;
-
 #![allow(clippy::expect_used, clippy::unwrap_used)]
+
+use super::*;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -95,8 +95,7 @@ struct OwnershipVoice {
 #[async_trait]
 impl Interface for OwnershipVoice {
     fn name(&self) -> InterfaceName {
-        InterfaceName::new(tinyvoice_bus::BUS_NAME)
-            .unwrap_or_else(|_| std::process::abort())
+        InterfaceName::new(tinyvoice_bus::BUS_NAME).unwrap_or_else(|_| std::process::abort())
     }
 
     fn members(&self) -> Vec<MemberName> {
@@ -198,7 +197,11 @@ impl Interface for OwnershipVoice {
                     .ok_or_else(|| tinybus::Error::failed("unknown recorder id"))?;
                 Value::Null
             }
-            _ => return Err(tinybus::Error::failed("unexpected ownership fixture method")),
+            _ => {
+                return Err(tinybus::Error::failed(
+                    "unexpected ownership fixture method",
+                ));
+            }
         };
 
         Ok(result)
@@ -220,10 +223,7 @@ fn ensure_vad_open(state: &PeerState, id: u64) -> tinybus::Result<()> {
     }
 }
 
-fn advance_fixture_session(
-    status: &mut SessionStatus,
-    input: SessionInput,
-) -> SessionAdvance {
+fn advance_fixture_session(status: &mut SessionStatus, input: SessionInput) -> SessionAdvance {
     let (accepted, action) = match input {
         SessionInput::Run if status.phase == SessionPhase::Stopped => {
             status.phase = SessionPhase::Idle;
@@ -239,16 +239,14 @@ fn advance_fixture_session(
                 },
             )
         }
-        SessionInput::SetupReady { stop_buffered: false }
-            if status.phase == SessionPhase::Recording =>
-        {
-            (
-                true,
-                SessionAction::RecordingLive {
-                    generation: status.generation,
-                },
-            )
-        }
+        SessionInput::SetupReady {
+            stop_buffered: false,
+        } if status.phase == SessionPhase::Recording => (
+            true,
+            SessionAction::RecordingLive {
+                generation: status.generation,
+            },
+        ),
         _ => (false, SessionAction::None),
     };
 
@@ -339,12 +337,8 @@ fn make_client(proxy: Proxy) -> TinyVoiceClient {
 
 impl AliasHandoffFixture {
     async fn move_public_alias_to_b(&self) -> tinybus::Result<()> {
-        self.service_a
-            .release_name(tinyvoice_bus::BUS_NAME)
-            .await?;
-        self.service_b
-            .request_name(tinyvoice_bus::BUS_NAME)
-            .await?;
+        self.service_a.release_name(tinyvoice_bus::BUS_NAME).await?;
+        self.service_b.request_name(tinyvoice_bus::BUS_NAME).await?;
         let owner = self.caller.name_owner(tinyvoice_bus::BUS_NAME).await?;
         if owner != self.service_b.unique_name() {
             return Err(tinybus::Error::failed(
