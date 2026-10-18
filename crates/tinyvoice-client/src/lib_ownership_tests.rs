@@ -440,11 +440,11 @@ async fn vad_session_stays_with_its_creator_across_a_live_public_alias_handover(
         methods(&fixture.state_a),
         [
             tinyvoice_bus::names::methods::VAD_OPEN,
+            tinyvoice_bus::names::methods::ROUTE,
             tinyvoice_bus::names::methods::VAD_PUSH,
             tinyvoice_bus::names::methods::VAD_IS_SPEAKING,
             tinyvoice_bus::names::methods::VAD_RESET,
             tinyvoice_bus::names::methods::VAD_CLOSE,
-            tinyvoice_bus::names::methods::ROUTE,
         ]
         .map(str::to_owned)
     );
