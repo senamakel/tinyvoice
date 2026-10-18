@@ -16,8 +16,8 @@ serde = "1"
 serde_json = "1"
 # Shared TinyVoice member names, request types, and typed replies.
 tinyvoice-bus = { version = "0.1.4", path = "../tinyvoice-bus" }
-# TinyBus 0.3.3 publishes the terminal stream verdict before reader EOF.
-tinybus = { version = ">=0.3.3, <0.4", path = "../../vendor/tinybus/crates/tinybus", default-features = false }
+# Keep the canonical Git source patchable by hosts that unify the SDK across modules.
+tinybus = { git = "https://github.com/tinyhumansai/tinybus", rev = "207a9a7df15e44fdba00a807d0f7eaf21904ba0e", version = ">=0.3.3, <0.4.0", default-features = false }
 
 [dev-dependencies]
 # Implements the async in-memory service used by the broker tests.
