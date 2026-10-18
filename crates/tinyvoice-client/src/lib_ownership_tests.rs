@@ -857,12 +857,10 @@ async fn owned_capture_stream_stays_with_its_creator_across_alias_handover() {
 #[tokio::test(start_paused = true)]
 async fn timed_out_owned_capture_start_can_publish_after_its_caller_loses_the_handle() {
     let gate = Arc::new(CaptureStartGate::default());
-    let fixture = handoff_fixture_with_capture_start_gate(
-        Some(gate.clone()),
-        Some(Duration::from_secs(1)),
-    )
-    .await
-    .expect("start gated capture service");
+    let fixture =
+        handoff_fixture_with_capture_start_gate(Some(gate.clone()), Some(Duration::from_secs(1)))
+            .await
+            .expect("start gated capture service");
     let client = fixture.client.clone();
     let (result_tx, result_rx) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {
@@ -879,7 +877,10 @@ async fn timed_out_owned_capture_start_can_publish_after_its_caller_loses_the_ha
     let timed_out = result_rx
         .await
         .expect("the client task reports its deadline result");
-    assert!(timed_out.is_err(), "the start RPC must hit its configured deadline");
+    assert!(
+        timed_out.is_err(),
+        "the start RPC must hit its configured deadline"
+    );
 
     // A timeout only stops the caller's wait. The in-flight service operation
     // can still publish the stream after the caller lost the private handle.
@@ -901,7 +902,9 @@ async fn timed_out_owned_capture_start_can_publish_after_its_caller_loses_the_ha
     assert_eq!(
         late_poll,
         Ok(Ok(CaptureBatch {
-            chunks: vec![RawChunk { samples: vec![0.25] }],
+            chunks: vec![RawChunk {
+                samples: vec![0.25]
+            }],
             closed: false,
         })),
         "the service published a live stream after start_capture_owned returned an error"
@@ -917,6 +920,55 @@ async fn timed_out_owned_capture_start_can_publish_after_its_caller_loses_the_ha
         ]
         .map(str::to_owned)
     );
+}
+
+#[tokio::test]
+async fn canceled_owned_capture_start_can_publish_after_its_caller_loses_the_handle() {
+    let gate = Arc::new(CaptureStartGate::default());
+    let fixture = handoff_fixture_with_capture_start_gate(Some(gate.clone()), None)
+        .await
+        .expect("start gated capture service");
+    let client = fixture.client.clone();
+    let start_task = tokio::spawn(async move {
+        client
+            .start_capture_owned(MicrophonePermission::Granted)
+            .await
+    });
+
+    gate.entered.notified().await;
+    start_task.abort();
+    assert!(
+        start_task
+            .await
+            .expect_err("the caller task is canceled")
+            .is_cancelled()
+    );
+
+    let completed = gate.completed.notified();
+    gate.release.notify_one();
+    completed.await;
+    let late_poll = fixture
+        .client
+        .poll_capture(CapturePollRequest {
+            handle: CaptureHandle(CAPTURE_ID.to_owned()),
+            max_chunks: 1,
+        })
+        .await;
+    let cleanup = fixture
+        .client
+        .stop_capture(CaptureHandle(CAPTURE_ID.to_owned()))
+        .await;
+    assert_eq!(
+        late_poll,
+        Ok(Ok(CaptureBatch {
+            chunks: vec![RawChunk {
+                samples: vec![0.25]
+            }],
+            closed: false,
+        })),
+        "canceling the call dropped its handle but did not stop remote startup"
+    );
+    assert_eq!(cleanup, Ok(Ok(())), "the fixture cleans up the late stream");
 }
 
 #[tokio::test]
