@@ -16,9 +16,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.91
+      - uses: dtolnay/rust-toolchain@1.91.0
       - name: Install native hotkey and capture prerequisites
         run: |
           sudo apt-get update

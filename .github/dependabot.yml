@@ -24,6 +24,9 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-patch"]
+      # Its tags are Rust toolchain versions, not action releases: the MSRV
+      # job pins the declared minimum and must never be "upgraded".
+      - dependency-name: "dtolnay/rust-toolchain"
     open-pull-requests-limit: 5
     commit-message:
       prefix: "ci"
